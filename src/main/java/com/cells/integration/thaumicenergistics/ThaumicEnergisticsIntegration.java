@@ -2,11 +2,15 @@ package com.cells.integration.thaumicenergistics;
 
 import java.util.List;
 
+import net.minecraft.client.resources.I18n;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fml.common.Loader;
+import net.minecraftforge.items.IItemHandler;
+import net.minecraft.tileentity.TileEntity;
 
 import appeng.api.AEApi;
+import appeng.api.parts.IPart;
 import appeng.api.storage.ICellInventory;
 import appeng.api.storage.ICellInventoryHandler;
 import appeng.api.storage.ISaveProvider;
@@ -16,11 +20,8 @@ import appeng.api.storage.data.IAEStack;
 import com.cells.Cells;
 import com.cells.cells.common.INBTSizeProvider;
 import com.cells.cells.configurable.ComponentInfo;
-import com.cells.cells.configurable.ConfigurableCellInventoryHandler;
 import com.cells.config.CellsConfig;
 import com.cells.util.NBTSizeHelper;
-
-import net.minecraft.client.resources.I18n;
 
 
 /**
@@ -109,11 +110,25 @@ public final class ThaumicEnergisticsIntegration {
                 if (channel != essentiaChannel) return null;
 
                 ConfigurableCellEssentiaInventory inventory = new ConfigurableCellEssentiaInventory(is, container, info);
-                return (ICellInventoryHandler<T>) new ConfigurableCellInventoryHandler<>(inventory, essentiaChannel);
+                return (ICellInventoryHandler<T>) new ConfigurableCellEssentiaInventoryHandler(inventory, essentiaChannel);
             } catch (Exception e) {
                 Cells.LOGGER.error("Failed to create essentia cell inventory", e);
                 return null;
             }
+        }
+
+        /**
+         * Check if the given TileEntity is an essentia import or export interface tile.
+         */
+        static boolean isTileEssentiaInterface(TileEntity te) {
+            return te instanceof TileEssentiaImportInterface || te instanceof TileEssentiaExportInterface;
+        }
+
+        /**
+         * Check if the given IPart is an essentia import or export interface part.
+         */
+        static boolean isPartEssentiaInterface(IPart part) {
+            return part instanceof PartEssentiaImportInterface || part instanceof PartEssentiaExportInterface;
         }
 
         static void addCellInformation(ItemStack cellStack, List<String> tooltip) {
@@ -151,6 +166,24 @@ public final class ThaumicEnergisticsIntegration {
     }
 
     /**
+     * Get the essentia-aware config inventory for a cell.
+     * Converts essentia containers to ItemDummyAspect stacks on insertion.
+     *
+     * @param cellStack The cell ItemStack
+     * @return An EssentiaCellConfig, or null if Thaumic Energistics is not loaded
+     */
+    public static IItemHandler getConfigInventory(ItemStack cellStack) {
+        if (!isModLoaded()) return null;
+
+        try {
+            return new EssentiaCellConfig(cellStack);
+        } catch (Exception e) {
+            Cells.LOGGER.error("Failed to create essentia cell config", e);
+            return null;
+        }
+    }
+
+    /**
      * Add AE2 cell information to a tooltip for an essentia cell.
      * Does nothing if Thaumic Energistics is not loaded.
      */
@@ -158,5 +191,33 @@ public final class ThaumicEnergisticsIntegration {
         if (!isModLoaded()) return;
 
         EssentiaIntegrationImpl.addCellInformation(cellStack, tooltip);
+    }
+
+    /**
+     * Check if the given TileEntity is an essentia import or export interface tile.
+     * Safe to call even if Thaumic Energistics is not loaded.
+     */
+    public static boolean isTileEssentiaInterface(TileEntity te) {
+        if (!isModLoaded()) return false;
+
+        try {
+            return EssentiaIntegrationImpl.isTileEssentiaInterface(te);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Check if the given IPart is an essentia import or export interface part.
+     * Safe to call even if Thaumic Energistics is not loaded.
+     */
+    public static boolean isPartEssentiaInterface(IPart part) {
+        if (!isModLoaded()) return false;
+
+        try {
+            return EssentiaIntegrationImpl.isPartEssentiaInterface(part);
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

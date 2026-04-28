@@ -1,6 +1,8 @@
 package com.cells.network.sync;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.annotation.Nullable;
 
@@ -16,6 +18,7 @@ import net.minecraftforge.fml.common.Loader;
 
 import appeng.api.storage.data.IAEFluidStack;
 import appeng.api.storage.data.IAEItemStack;
+import appeng.api.storage.data.IAEStack;
 import appeng.fluids.util.AEFluidStack;
 import appeng.util.item.AEItemStack;
 
@@ -71,10 +74,10 @@ public enum ResourceType {
                 writeFluid(buf, (IAEFluidStack) resource);
                 break;
             case GAS:
-                GasSerializationHelper.write(buf, resource);
+                if (GAS.isAvailable()) GasSerializationHelper.write(buf, resource);
                 break;
             case ESSENTIA:
-                EssentiaSerializationHelper.write(buf, resource);
+                if (ESSENTIA.isAvailable()) EssentiaSerializationHelper.write(buf, resource);
                 break;
         }
     }
@@ -93,9 +96,9 @@ public enum ResourceType {
             case FLUID:
                 return readFluid(buf);
             case GAS:
-                return GasSerializationHelper.read(buf);
+                return GAS.isAvailable() ? GasSerializationHelper.read(buf) : null;
             case ESSENTIA:
-                return EssentiaSerializationHelper.read(buf);
+                return ESSENTIA.isAvailable() ? EssentiaSerializationHelper.read(buf) : null;
             default:
                 return null;
         }
@@ -191,7 +194,10 @@ public enum ResourceType {
 
         long amount = buf.readLong();
 
-        FluidStack fluid = FluidRegistry.getFluidStack(fluidName, (int) amount);
+        // FluidRegistry.getFluidStack takes an int amount, but we store longs.
+        // Pass 1 as a dummy, we only need the FluidStack for identity (fluid type + NBT).
+        // The real amount is restored on the IAEFluidStack below.
+        FluidStack fluid = FluidRegistry.getFluidStack(fluidName, 1);
         if (fluid == null) return null;
 
         // Read NBT if present
@@ -208,10 +214,34 @@ public enum ResourceType {
             }
         }
 
-        return AEFluidStack.fromFluidStack(fluid);
+        IAEFluidStack result = AEFluidStack.fromFluidStack(fluid);
+        if (result != null) result.setStackSize(amount);
+
+        return result;
     }
 
     // ================================= Availability Checks =================================
+
+    /**
+     * Deep-copy a stack object for caching purposes.
+     * All supported stack types (IAEItemStack, IAEFluidStack, IAEGasStack, IAEEssentiaStack)
+     * extend IAEStack, which provides a copy() method.
+     *
+     * @param stack The stack to copy, or null
+     * @return A deep copy of the stack, or null if the input was null
+     */
+    @Nullable
+    @SuppressWarnings("rawtypes")
+    public static Object copyStack(@Nullable Object stack) {
+        if (stack == null) return null;
+
+        if (stack instanceof IAEStack) {
+            return ((IAEStack) stack).copy();
+        }
+
+        // Fallback: return as-is (should not happen for known types)
+        return stack;
+    }
 
     /**
      * Check if this resource type is available (mod loaded).
@@ -228,5 +258,27 @@ public enum ResourceType {
             default:
                 return false;
         }
+    }
+
+    /**
+     * Get a ResourceType from its ordinal value.
+     * Returns ITEM if the ordinal is out of range.
+     */
+    public static ResourceType fromOrdinal(int ordinal) {
+        ResourceType[] values = values();
+        if (ordinal >= 0 && ordinal < values.length) return values[ordinal];
+        return ITEM;
+    }
+
+    /**
+     * Get all ResourceTypes whose backing mod is currently loaded.
+     * Always includes ITEM and FLUID; GAS and ESSENTIA depend on mod presence.
+     */
+    public static ResourceType[] getAvailableTypes() {
+        List<ResourceType> list = new ArrayList<>();
+        for (ResourceType type : values()) {
+            if (type.isAvailable()) list.add(type);
+        }
+        return list.toArray(new ResourceType[0]);
     }
 }

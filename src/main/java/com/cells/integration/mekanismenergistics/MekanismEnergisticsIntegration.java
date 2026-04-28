@@ -2,13 +2,15 @@ package com.cells.integration.mekanismenergistics;
 
 import java.util.List;
 
+import net.minecraft.client.resources.I18n;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.tileentity.TileEntity;
 import net.minecraftforge.fml.common.Loader;
-
-import net.minecraft.client.resources.I18n;
+import net.minecraftforge.items.IItemHandler;
 
 import appeng.api.AEApi;
+import appeng.api.parts.IPart;
 import appeng.api.storage.ICellInventory;
 import appeng.api.storage.ICellInventoryHandler;
 import appeng.api.storage.ISaveProvider;
@@ -88,6 +90,24 @@ public final class MekanismEnergisticsIntegration {
     }
 
     /**
+     * Get the gas-aware config inventory for a cell.
+     * Converts gas containers to ItemDummyGas stacks on insertion.
+     *
+     * @param cellStack The cell ItemStack
+     * @return A GasCellConfig, or null if Mekanism Energistics is not loaded
+     */
+    public static IItemHandler getConfigInventory(ItemStack cellStack) {
+        if (!isModLoaded()) return null;
+
+        try {
+            return GasIntegrationImpl.getConfigInventory(cellStack);
+        } catch (Exception e) {
+            Cells.LOGGER.error("Failed to create gas cell config", e);
+            return null;
+        }
+    }
+
+    /**
      * Add AE2 cell information to a tooltip for a gas cell.
      * Does nothing if Mekanism Energistics is not loaded.
      */
@@ -107,6 +127,10 @@ public final class MekanismEnergisticsIntegration {
         static IStorageChannel<?> getChannel() {
             return AEApi.instance().storage().getStorageChannel(
                 com.mekeng.github.common.me.storage.IGasStorageChannel.class);
+        }
+
+        static IItemHandler getConfigInventory(ItemStack cellStack) {
+            return new com.mekeng.github.util.helpers.GasCellConfig(cellStack);
         }
 
         @SuppressWarnings("unchecked")
@@ -165,6 +189,20 @@ public final class MekanismEnergisticsIntegration {
         static boolean isGasStack(IAEStack<?> stack) {
             return stack instanceof com.mekeng.github.common.me.data.IAEGasStack;
         }
+
+        /**
+         * Check if the given TileEntity is a gas import or export interface tile.
+         */
+        static boolean isTileGasInterface(TileEntity te) {
+            return te instanceof TileGasImportInterface || te instanceof TileGasExportInterface;
+        }
+
+        /**
+         * Check if the given IPart is a gas import or export interface part.
+         */
+        static boolean isPartGasInterface(IPart part) {
+            return part instanceof PartGasImportInterface || part instanceof PartGasExportInterface;
+        }
     }
 
     /**
@@ -176,6 +214,34 @@ public final class MekanismEnergisticsIntegration {
 
         try {
             return GasIntegrationImpl.isGasStack(stack);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Check if the given TileEntity is a gas import or export interface tile.
+     * Safe to call even if Mekanism Energistics is not loaded.
+     */
+    public static boolean isTileGasInterface(TileEntity te) {
+        if (!isModLoaded()) return false;
+
+        try {
+            return GasIntegrationImpl.isTileGasInterface(te);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Check if the given IPart is a gas import or export interface part.
+     * Safe to call even if Mekanism Energistics is not loaded.
+     */
+    public static boolean isPartGasInterface(IPart part) {
+        if (!isModLoaded()) return false;
+
+        try {
+            return GasIntegrationImpl.isPartGasInterface(part);
         } catch (Exception e) {
             return false;
         }

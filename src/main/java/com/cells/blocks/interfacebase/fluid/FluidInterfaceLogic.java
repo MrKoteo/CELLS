@@ -1,7 +1,10 @@
 package com.cells.blocks.interfacebase.fluid;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.annotation.Nullable;
 
@@ -9,11 +12,14 @@ import com.cells.blocks.interfacebase.AbstractResourceInterfaceLogic;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
+import net.minecraft.util.EnumFacing;
 
 import net.minecraftforge.common.util.Constants;
 import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidRegistry;
 import net.minecraftforge.fluids.FluidStack;
+import net.minecraftforge.common.capabilities.Capability;
+import net.minecraftforge.fluids.capability.CapabilityFluidHandler;
 import net.minecraftforge.fluids.capability.IFluidHandler;
 import net.minecraftforge.fluids.capability.IFluidTankProperties;
 
@@ -23,6 +29,7 @@ import appeng.api.storage.IMEInventory;
 import appeng.api.storage.channels.IFluidStorageChannel;
 import appeng.api.storage.data.IAEFluidStack;
 import appeng.fluids.util.AEFluidStack;
+import appeng.tile.inventory.AppEngInternalInventory;
 
 import com.cells.items.ItemRecoveryContainer;
 import com.cells.util.FluidStackKey;
@@ -57,6 +64,19 @@ public class FluidInterfaceLogic extends AbstractResourceInterfaceLogic<FluidSta
         }
     }
 
+    /**
+     * Constructor with a shared upgrade inventory for combined interfaces.
+     */
+    public FluidInterfaceLogic(Host host, AppEngInternalInventory sharedUpgradeInventory) {
+        super(host, FluidStack.class, sharedUpgradeInventory);
+
+        if (host.isExport()) {
+            this.externalHandler = new ExportFluidHandler(this);
+        } else {
+            this.externalHandler = new FilteredFluidHandler(this);
+        }
+    }
+
     @Override
     public String getTypeName() {
         return "fluid";
@@ -81,14 +101,6 @@ public class FluidInterfaceLogic extends AbstractResourceInterfaceLogic<FluidSta
     @Nullable
     public FluidStack drainFluidFromTank(int slot, int maxDrain, boolean doDrain) {
         return drainFromSlot(slot, maxDrain, doDrain);
-    }
-
-    public int insertFluidsIntoNetwork(FluidStack fluid) {
-        return insertIntoNetwork(fluid);
-    }
-
-    public int findSlotForFluid(FluidStack fluid) {
-        return findSlotForResource(fluid);
     }
 
     // ============================== Abstract method implementations ==============================
@@ -181,9 +193,9 @@ public class FluidInterfaceLogic extends AbstractResourceInterfaceLogic<FluidSta
     }
 
     /**
-     * Override to handle legacy TAG_LIST format for storage.
-     * Old format: TAG_LIST with one entry per slot, empties marked "Empty".
-     * New format: TAG_COMPOUND with slot indices as string keys.
+     * Override to handle legacy formats for storage.
+     * Old TAG_LIST format: one entry per slot, empties marked "Empty".
+     * Old TAG_COMPOUND format: numeric string keys ("0", "1", etc.) with FluidName/Amount.
      */
     @Override
     protected void readStorageFromNBT(NBTTagCompound data) {
@@ -195,17 +207,49 @@ public class FluidInterfaceLogic extends AbstractResourceInterfaceLogic<FluidSta
             return;
         }
 
-        // Legacy TAG_LIST format migration
         String oldStorageKey = "fluidTanks";
+
+        // Legacy TAG_COMPOUND format migration
+        // Format: fluidTanks: { "0": {FluidName, Amount}, "1": {FluidName, Amount}, ... }
+        if (data.hasKey(oldStorageKey, Constants.NBT.TAG_COMPOUND)) {
+            NBTTagCompound storageCompound = data.getCompoundTag(oldStorageKey);
+
+            for (int i = 0; i < STORAGE_SLOTS; i++) {
+                FluidStack fs = null;
+                long amount = 0;
+
+                String slotKey = String.valueOf(i);
+                if (storageCompound.hasKey(slotKey, Constants.NBT.TAG_COMPOUND)) {
+                    NBTTagCompound slotTag = storageCompound.getCompoundTag(slotKey);
+                    FluidStack fluid = readResourceFromNBT(slotTag);
+                    if (fluid != null) {
+                        fs = copyAsIdentity(fluid);
+                        amount = slotTag.hasKey("Amount") ? slotTag.getInteger("Amount") : fluid.amount;
+                    }
+                }
+
+                this.setResourceInSlotWithAmount(i, fs, amount);
+            }
+            return;
+        }
+
+        // Legacy TAG_LIST format migration (unclear if it ever existed in production)
         if (data.hasKey(oldStorageKey, Constants.NBT.TAG_LIST)) {
             NBTTagList storageList = data.getTagList(oldStorageKey, Constants.NBT.TAG_COMPOUND);
             for (int i = 0; i < storageList.tagCount() && i < STORAGE_SLOTS; i++) {
+                FluidStack fs = null;
+                long amount = 0;
+
                 NBTTagCompound slotTag = storageList.getCompoundTagAt(i);
-                if (slotTag.hasKey("Empty")) {
-                    this.storage[i] = null;
-                } else {
-                    this.storage[i] = readResourceFromNBT(slotTag);
+                if (!slotTag.hasKey("Empty")) {
+                    FluidStack fluid = readResourceFromNBT(slotTag);
+                    if (fluid != null) {
+                        fs = copyAsIdentity(fluid);
+                        amount = slotTag.hasKey("Amount") ? slotTag.getInteger("Amount") : fluid.amount;
+                    }
                 }
+
+                this.setResourceInSlotWithAmount(i, fs, amount);
             }
         }
     }
@@ -220,15 +264,70 @@ public class FluidInterfaceLogic extends AbstractResourceInterfaceLogic<FluidSta
     }
 
     @Override
-    protected ItemStack createRecoveryItem(FluidStack resource) {
-        return ItemRecoveryContainer.createForFluid(resource);
+    protected ItemStack createRecoveryItem(FluidStack identity, long amount) {
+        return ItemRecoveryContainer.createForFluid(identity, amount);
     }
 
-    /**
-     * Handle fluid filter changes. Call from host's onFluidInventoryChanged.
-     */
-    public void onFluidFilterChanged(int slot) {
-        onFilterChanged(slot);
+    // ============================== Auto-Pull/Push capability methods ==============================
+
+    @Override
+    protected List<Capability<?>> getAdjacentCapabilities() {
+        return Collections.singletonList(CapabilityFluidHandler.FLUID_HANDLER_CAPABILITY);
+    }
+
+    @Override
+    protected long countResourceInHandler(Object handler, FluidStackKey key, EnumFacing facing) {
+        if (!(handler instanceof IFluidHandler)) return 0;
+
+        long total = 0;
+        IFluidTankProperties[] tanks = ((IFluidHandler) handler).getTankProperties();
+        if (tanks == null) return 0;
+
+        for (IFluidTankProperties tank : tanks) {
+            FluidStack contents = tank.getContents();
+            if (key.matches(contents)) total += contents.amount;
+        }
+        return total;
+    }
+
+    @Override
+    @Nullable
+    protected Map<FluidStackKey, Long> buildResourceCountMap(Object handler, EnumFacing facing) {
+        if (!(handler instanceof IFluidHandler)) return null;
+
+        IFluidTankProperties[] tanks = ((IFluidHandler) handler).getTankProperties();
+        if (tanks == null) return null;
+
+        Map<FluidStackKey, Long> map = new HashMap<>();
+        for (IFluidTankProperties tank : tanks) {
+            FluidStack contents = tank.getContents();
+            if (contents == null || contents.amount <= 0) continue;
+
+            FluidStackKey key = FluidStackKey.of(contents);
+            if (key != null) map.merge(key, (long) contents.amount, Long::sum);
+        }
+
+        return map;
+    }
+
+    @Override
+    protected long extractResourceFromHandler(Object handler, FluidStackKey key, int maxAmount, EnumFacing facing) {
+        if (!(handler instanceof IFluidHandler)) return 0;
+
+        // IFluidHandler.drain(FluidStack, true) drains a specific fluid type up to the stack's amount.
+        // It already caps at the available amount internally, so no pre-check is needed.
+        FluidStack toDrain = new FluidStack(key.getFluid(), maxAmount, key.getNbt());
+        FluidStack drained = ((IFluidHandler) handler).drain(toDrain, true);
+        return drained != null ? drained.amount : 0;
+    }
+
+    @Override
+    protected long insertResourceIntoHandler(Object handler, FluidStack identity, int maxAmount, EnumFacing facing) {
+        if (!(handler instanceof IFluidHandler)) return 0;
+
+        FluidStack toFill = identity.copy();
+        toFill.amount = maxAmount;
+        return ((IFluidHandler) handler).fill(toFill, true);
     }
 
     // ============================== External handlers ==============================
@@ -248,22 +347,32 @@ public class FluidInterfaceLogic extends AbstractResourceInterfaceLogic<FluidSta
         public IFluidTankProperties[] getTankProperties() {
             List<IFluidTankProperties> props = new ArrayList<>();
 
-            for (int slot : logic.filterSlotList) {
-                FluidStack contents = logic.storage[slot];
-                int capacity = logic.maxSlotSize;
+            for (int slot : logic.getFilterSlotList()) {
+                final int s = slot;
+                // Per-slot effective capacity (may differ from global maxSlotSize if overridden)
+                final int slotCapacity = (int) Math.min(
+                    logic.inventoryManager.getEffectiveMaxSlotSize(slot), Integer.MAX_VALUE);
 
-                FluidStackKey filterKey = logic.slotToFilterMap.get(slot);
+                FluidStackKey filterKey = logic.getFilterKey(slot);
 
                 props.add(new IFluidTankProperties() {
                     @Nullable
                     @Override
                     public FluidStack getContents() {
-                        return contents != null ? contents.copy() : null;
+                        // Create stack with actual amount from parallel array
+                        FluidStack identity = logic.getStorageIdentity(s);
+                        if (identity == null) return null;
+
+                        long amount = logic.getSlotAmount(s);
+                        if (amount <= 0) return null;
+
+                        // Clamp to int for external API
+                        return logic.copyWithAmount(identity, (int) Math.min(amount, Integer.MAX_VALUE));
                     }
 
                     @Override
                     public int getCapacity() {
-                        return capacity;
+                        return slotCapacity;
                     }
 
                     @Override
@@ -326,22 +435,32 @@ public class FluidInterfaceLogic extends AbstractResourceInterfaceLogic<FluidSta
         public IFluidTankProperties[] getTankProperties() {
             List<IFluidTankProperties> props = new ArrayList<>();
 
-            for (int slot : logic.filterSlotList) {
-                FluidStack contents = logic.storage[slot];
-                int capacity = logic.maxSlotSize;
+            for (int slot : logic.getFilterSlotList()) {
+                final int s = slot;
+                // Per-slot effective capacity (may differ from global maxSlotSize if overridden)
+                final int slotCapacity = (int) Math.min(
+                    logic.inventoryManager.getEffectiveMaxSlotSize(slot), Integer.MAX_VALUE);
 
-                FluidStackKey filterKey = logic.slotToFilterMap.get(slot);
+                FluidStackKey filterKey = logic.getFilterKey(slot);
 
                 props.add(new IFluidTankProperties() {
                     @Nullable
                     @Override
                     public FluidStack getContents() {
-                        return contents != null ? contents.copy() : null;
+                        // Create stack with actual amount from parallel array
+                        FluidStack identity = logic.getStorageIdentity(s);
+                        if (identity == null) return null;
+
+                        long amount = logic.getSlotAmount(s);
+                        if (amount <= 0) return null;
+
+                        // Clamp to int for external API
+                        return logic.copyWithAmount(identity, (int) Math.min(amount, Integer.MAX_VALUE));
                     }
 
                     @Override
                     public int getCapacity() {
-                        return capacity;
+                        return slotCapacity;
                     }
 
                     @Override

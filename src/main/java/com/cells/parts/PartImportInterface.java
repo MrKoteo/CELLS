@@ -1,7 +1,6 @@
 package com.cells.parts;
 
 import net.minecraft.item.ItemStack;
-import net.minecraft.util.ResourceLocation;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.items.CapabilityItemHandler;
 import net.minecraftforge.items.IItemHandlerModifiable;
@@ -11,7 +10,6 @@ import appeng.capabilities.Capabilities;
 import appeng.items.parts.PartModels;
 import appeng.parts.PartModel;
 
-import com.cells.Tags;
 import com.cells.blocks.interfacebase.item.IItemInterfaceHost;
 import com.cells.blocks.interfacebase.item.ItemInterfaceLogic;
 import com.cells.gui.CellsGuiHandler;
@@ -28,17 +26,16 @@ public class PartImportInterface extends AbstractInterfacePart<ItemInterfaceLogi
         implements IItemInterfaceHost, ItemInterfaceLogic.Host {
 
     private static final String prefix = "part/import_interface/item/";
-
-    public static final ResourceLocation MODEL_BASE = new ResourceLocation(Tags.MODID, prefix + "base");
-
-    @PartModels
-    public static final PartModel MODELS_OFF = new PartModel(MODEL_BASE, new ResourceLocation(Tags.MODID, prefix + "off"));
+    private static final Object[] MODELS = PartModelsHelper.createInterfaceModels(prefix);
 
     @PartModels
-    public static final PartModel MODELS_ON = new PartModel(MODEL_BASE, new ResourceLocation(Tags.MODID, prefix + "on"));
+    public static final PartModel MODELS_OFF = (PartModel) MODELS[1];
 
     @PartModels
-    public static final PartModel MODELS_HAS_CHANNEL = new PartModel(MODEL_BASE, new ResourceLocation(Tags.MODID, prefix + "has_channel"));
+    public static final PartModel MODELS_ON = (PartModel) MODELS[2];
+
+    @PartModels
+    public static final PartModel MODELS_HAS_CHANNEL = (PartModel) MODELS[3];
 
     public PartImportInterface(final ItemStack is) {
         super(is);
@@ -60,10 +57,9 @@ public class PartImportInterface extends AbstractInterfacePart<ItemInterfaceLogi
         return MODELS_HAS_CHANNEL;
     }
 
-    // TODO: refactor card name with tile.cells.import_interface + logic.getTypeName()
-
     @Override
     protected String getMemoryCardName() {
+        // the 'item' variant doesn't have the type suffix
         return "tile.cells.import_interface";
     }
 
@@ -75,11 +71,6 @@ public class PartImportInterface extends AbstractInterfacePart<ItemInterfaceLogi
     @Override
     public int getMainGuiId() {
         return CellsGuiHandler.GUI_PART_IMPORT_INTERFACE;
-    }
-
-    @Override
-    public IItemHandlerModifiable getFilterInventory() {
-        return this.logic.getFilterInventory();
     }
 
     @Override

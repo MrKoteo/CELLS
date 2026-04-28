@@ -1,5 +1,11 @@
 package com.cells.blocks.interfacebase.item;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Predicate;
 
 import javax.annotation.Nonnull;
@@ -11,9 +17,13 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
+import net.minecraft.util.EnumFacing;
 import net.minecraft.util.NonNullList;
 import net.minecraft.util.ResourceLocation;
+import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.util.Constants;
+import net.minecraftforge.fml.common.network.ByteBufUtils;
+import net.minecraftforge.items.CapabilityItemHandler;
 import net.minecraftforge.items.IItemHandler;
 import net.minecraftforge.items.IItemHandlerModifiable;
 
@@ -22,11 +32,15 @@ import appeng.api.networking.storage.IStorageGrid;
 import appeng.api.storage.IMEInventory;
 import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
+import appeng.capabilities.Capabilities;
+import appeng.tile.inventory.AppEngInternalInventory;
 import appeng.util.item.AEItemStack;
 
 import com.jaquadro.minecraft.storagedrawers.api.capabilities.IItemRepository;
 
 import com.cells.blocks.interfacebase.AbstractResourceInterfaceLogic;
+import com.cells.blocks.interfacebase.managers.InterfaceAdjacentHandler;
+import com.cells.items.ItemRecoveryContainer;
 import com.cells.util.ItemStackKey;
 
 
@@ -51,25 +65,39 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
     /** Default max slot size for items (standard stack size). */
     public static final int DEFAULT_MAX_SLOT_SIZE = 64;
 
-    /** IItemHandler wrapper for filter array access. */
-    private final IItemHandlerModifiable filterHandler;
-
     /** IItemHandler wrapper for storage array access. */
     private final IItemHandlerModifiable storageHandler;
 
     /** External handler exposed via capabilities. */
     private final IItemHandler externalHandler;
 
+    @Override
+    public long getDefaultMaxSlotSize() {
+        return DEFAULT_MAX_SLOT_SIZE;
+    }
+
     public ItemInterfaceLogic(Host host) {
         super(host, ItemStack.class);
 
-        this.maxSlotSize = DEFAULT_MAX_SLOT_SIZE;
-
-        // Create IItemHandler wrappers for the static arrays
-        this.filterHandler = new ArrayItemHandler(this.filters, true);
-        this.storageHandler = new ArrayItemHandler(this.storage, false);
+        // Create IItemHandler wrapper for storage access via GUI
+        this.storageHandler = new ArrayItemHandler(STORAGE_SLOTS, false);
 
         // Create appropriate external handler based on direction
+        if (host.isExport()) {
+            this.externalHandler = new ExportStorageHandler(this);
+        } else {
+            this.externalHandler = new FilteredStorageHandler(this);
+        }
+    }
+
+    /**
+     * Constructor with a shared upgrade inventory for combined interfaces.
+     */
+    public ItemInterfaceLogic(Host host, AppEngInternalInventory sharedUpgradeInventory) {
+        super(host, ItemStack.class, sharedUpgradeInventory);
+
+        this.storageHandler = new ArrayItemHandler(STORAGE_SLOTS, false);
+
         if (host.isExport()) {
             this.externalHandler = new ExportStorageHandler(this);
         } else {
@@ -80,13 +108,6 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
     @Override
     public String getTypeName() {
         return "item";
-    }
-
-    /**
-     * @return IItemHandler wrapper for filter access.
-     */
-    public IItemHandlerModifiable getFilterInventory() {
-        return this.filterHandler;
     }
 
     /**
@@ -112,43 +133,15 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
     }
 
     /**
-     * @return The filter array directly. Wrapping in IItemHandler is caller's responsibility if needed.
-     */
-    public ItemStack[] getFilterArray() {
-        return this.filters;
-    }
-
-    /**
-     * @return The storage array directly. Wrapping in IItemHandler is caller's responsibility if needed.
-     */
-    public ItemStack[] getStorageArray() {
-        return this.storage;
-    }
-
-    /**
-     * Get storage at a specific slot.
-     * @return The stored ItemStack, or null if slot is empty or invalid
+     * Get the ItemStack in a specific slot with the correct amount.
+     * Uses getResourceInSlot to return a stack with the actual amount from amounts[] array.
+     *
+     * @param slot The slot index
+     * @return The stored ItemStack with correct count, or null if empty
      */
     @Nullable
-    public ItemStack getStorage(int slot) {
-        if (slot < 0 || slot >= STORAGE_SLOTS) return null;
-        return this.storage[slot];
-    }
-
-    /**
-     * Set storage at a specific slot. Converts EMPTY to null internally.
-     */
-    public void setStorage(int slot, @Nullable ItemStack stack) {
-        if (slot < 0 || slot >= STORAGE_SLOTS) return;
-        this.storage[slot] = (stack == null || stack.isEmpty()) ? null : stack;
-    }
-
-    /**
-     * Check if a stack is in the filter.
-     * Delegates to isResourceInFilter from base class.
-     */
-    public boolean isStackInFilter(@Nullable ItemStack stack) {
-        return isResourceInFilter(stack);
+    public ItemStack getItemInSlot(int slot) {
+        return getResourceInSlot(slot);
     }
 
     /**
@@ -159,7 +152,7 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
         if (slot < 0 || slot >= STORAGE_SLOTS) return false;
         if (stack == null || stack.isEmpty()) return false;
 
-        ItemStackKey filterKey = this.slotToFilterMap.get(slot);
+        ItemStackKey filterKey = this.getFilterKey(slot);
         if (filterKey == null) return false;
 
         return filterKey.matches(stack);
@@ -250,172 +243,317 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
     }
 
     @Override
-    protected ItemStack createRecoveryItem(ItemStack resource) {
-        // Items ARE items - return the resource directly as the drop
-        return resource.copy();
+    protected ItemStack createRecoveryItem(ItemStack identity, long amount) {
+        // Items with small amounts can be dropped directly as ItemStack
+        // For large amounts (> max stack size), use RecoveryContainer
+        if (amount <= Integer.MAX_VALUE) {
+            ItemStack drop = identity.copy();
+            drop.setCount((int) amount);
+            return drop;
+        }
+
+        // Large amounts need RecoveryContainer to preserve full long amount
+        return ItemRecoveryContainer.createForItem(identity, amount);
+    }
+
+    // ============================== Auto-Pull/Push capability methods ==============================
+
+    @Override
+    protected List<Capability<?>> getAdjacentCapabilities() {
+        // Prefer IItemRepository (slotless bulk operations, e.g. Storage Drawers) over
+        // IItemHandler (slot-by-slot iteration). ITEM_REPOSITORY_CAPABILITY is always
+        // registered by CELLS in preInit, even without Storage Drawers present.
+        return Arrays.asList(Capabilities.ITEM_REPOSITORY_CAPABILITY, CapabilityItemHandler.ITEM_HANDLER_CAPABILITY);
+    }
+
+    // ============================== IItemHandler slot cache ==============================
+
+    /**
+     * Cached snapshot of an IItemHandler's slot contents, built once per handler per
+     * auto-pull/push cycle. Avoids O(N×F) full-scan overhead (N=handler slots, F=filter count)
+     * by indexing slots by ItemStackKey, allowing extract/insert operations to jump directly
+     * to relevant slots instead of scanning all N slots per filter.
+     * <p>
+     * The cache is <b>mutable</b>: counts, empty-slot lists, and totalCounts are updated
+     * after each extract/insert operation, so subsequent filter iterations within the same
+     * cycle see accurate state without re-scanning. This also means that callers holding
+     * a reference to {@link #totalCounts} (e.g. keepQuantity logic in
+     * {@link InterfaceAdjacentHandler}) automatically see post-mutation values.
+     * <p>
+     * Lifecycle: built lazily on first access via {@link #getOrBuildCache}, valid for the
+     * duration of one {@link InterfaceAdjacentHandler#performAutoPullPush} cycle, then
+     * cleared by {@link #flushOperationCaches()}.
+     */
+    private static class ItemHandlerSlotCache {
+
+        /** The handler this cache was built for (identity comparison). */
+        final IItemHandler handler;
+
+        /**
+         * Occupied slots indexed by item key. Each entry tracks the slot index,
+         * current count (mutable), and slot limit. Entries with count=0 are
+         * stale (depleted by extraction) and skipped on access.
+         */
+        final Map<ItemStackKey, List<SlotEntry>> occupiedSlots;
+
+        /**
+         * Empty slots available for insertion, ordered by index.
+         * Entries are removed as items are inserted into them.
+         */
+        final List<SlotEntry> emptySlots;
+
+        /**
+         * Pre-computed total counts per key. Updated in-place after mutations,
+         * so callers holding a reference to this map (e.g. keepQuantity logic
+         * in InterfaceAdjacentHandler) automatically see updated values.
+         */
+        final Map<ItemStackKey, Long> totalCounts;
+
+        ItemHandlerSlotCache(IItemHandler handler) {
+            this.handler = handler;
+            this.occupiedSlots = new HashMap<>();
+            this.emptySlots = new ArrayList<>();
+            this.totalCounts = new HashMap<>();
+
+            int slots = handler.getSlots();
+            for (int i = 0; i < slots; i++) {
+                int limit = handler.getSlotLimit(i);
+                ItemStack stack = handler.getStackInSlot(i);
+
+                if (stack.isEmpty()) {
+                    this.emptySlots.add(new SlotEntry(i, 0, limit));
+                    continue;
+                }
+
+                ItemStackKey key = ItemStackKey.of(stack);
+                if (key == null) continue;
+
+                int count = stack.getCount();
+                this.occupiedSlots.computeIfAbsent(key, k -> new ArrayList<>())
+                        .add(new SlotEntry(i, count, limit));
+                this.totalCounts.merge(key, (long) count, Long::sum);
+            }
+        }
+
+        /** Mutable entry tracking a single slot's state within the cache. */
+        static class SlotEntry {
+            final int slotIndex;
+            final int limit;
+            int count; // mutable, updated after extract/insert operations
+
+            SlotEntry(int slotIndex, int count, int limit) {
+                this.slotIndex = slotIndex;
+                this.count = count;
+                this.limit = limit;
+            }
+        }
+    }
+
+    /**
+     * Cached slot snapshot for the current auto-pull/push cycle.
+     * Null when no cycle is active. Cleared by {@link #flushOperationCaches()}.
+     */
+    @Nullable
+    private ItemHandlerSlotCache itemHandlerCache = null;
+
+    /**
+     * Get or lazily build the slot cache for the given IItemHandler.
+     * If the handler differs from the cached one (different facing / different TE),
+     * the cache is rebuilt from scratch.
+     */
+    private ItemHandlerSlotCache getOrBuildCache(IItemHandler handler) {
+        if (this.itemHandlerCache != null && this.itemHandlerCache.handler == handler) {
+            return this.itemHandlerCache;
+        }
+
+        this.itemHandlerCache = new ItemHandlerSlotCache(handler);
+        return this.itemHandlerCache;
+    }
+
+    @Override
+    protected void flushOperationCaches() {
+        this.itemHandlerCache = null;
+    }
+
+    // ============================== Auto-Pull/Push capability methods (cached) ==============================
+
+    @Override
+    protected long countResourceInHandler(Object handler, ItemStackKey key, EnumFacing facing) {
+        if (handler instanceof IItemRepository) {
+            return ((IItemRepository) handler).getStoredItemCount(key.toStack(1));
+        }
+
+        if (!(handler instanceof IItemHandler)) return 0;
+
+        // Use cached total counts when available (avoids O(N) slot scan per key)
+        ItemHandlerSlotCache cache = getOrBuildCache((IItemHandler) handler);
+        return cache.totalCounts.getOrDefault(key, 0L);
+    }
+
+    /**
+     * Extract items from an adjacent IItemHandler using the slot cache.
+     * Instead of scanning all N slots, jumps directly to slots known to contain
+     * the target item. Updates the cache after each extraction so subsequent
+     * filter iterations see accurate state.
+     */
+    @Override
+    protected long extractResourceFromHandler(Object handler, ItemStackKey key, int maxAmount, EnumFacing facing) {
+        if (handler instanceof IItemRepository) {
+            ItemStack extracted = ((IItemRepository) handler).extractItem(key.toStack(1), maxAmount, false);
+            return extracted.isEmpty() ? 0 : extracted.getCount();
+        }
+
+        if (!(handler instanceof IItemHandler)) return 0;
+
+        IItemHandler itemHandler = (IItemHandler) handler;
+        ItemHandlerSlotCache cache = getOrBuildCache(itemHandler);
+
+        List<ItemHandlerSlotCache.SlotEntry> entries = cache.occupiedSlots.get(key);
+        if (entries == null || entries.isEmpty()) return 0;
+
+        long totalExtracted = 0;
+        int remaining = maxAmount;
+
+        for (int i = 0; i < entries.size() && remaining > 0; i++) {
+            ItemHandlerSlotCache.SlotEntry entry = entries.get(i);
+            if (entry.count <= 0) continue; // Depleted by a prior operation in this cycle
+
+            ItemStack extracted = itemHandler.extractItem(entry.slotIndex, remaining, false);
+            if (extracted.isEmpty()) continue;
+
+            int extractedCount = extracted.getCount();
+            totalExtracted += extractedCount;
+            remaining -= extractedCount;
+            entry.count -= extractedCount;
+            cache.totalCounts.merge(key, -(long) extractedCount, Long::sum);
+
+            // Slot emptied, make it available for future insertions
+            if (entry.count <= 0) {
+                cache.emptySlots.add(new ItemHandlerSlotCache.SlotEntry(
+                        entry.slotIndex, 0, entry.limit));
+            }
+        }
+
+        return totalExtracted;
+    }
+
+    /**
+     * Insert items into an adjacent IItemHandler using the slot cache.
+     * Phase 1: merge into existing slots that already contain the same item type.
+     * Phase 2: fill empty slots.
+     * Updates the cache after each insertion so subsequent filter iterations
+     * see accurate state.
+     */
+    @Override
+    protected long insertResourceIntoHandler(Object handler, ItemStack identity, int maxAmount, EnumFacing facing) {
+        if (handler instanceof IItemRepository) {
+            ItemStack toInsert = copyWithAmount(identity, maxAmount);
+            ItemStack remainder = ((IItemRepository) handler).insertItem(toInsert, false);
+            return maxAmount - (remainder.isEmpty() ? 0 : remainder.getCount());
+        }
+
+        if (!(handler instanceof IItemHandler)) return 0;
+
+        IItemHandler itemHandler = (IItemHandler) handler;
+        ItemHandlerSlotCache cache = getOrBuildCache(itemHandler);
+
+        ItemStackKey key = ItemStackKey.of(identity);
+        if (key == null) return 0;
+
+        int remaining = maxAmount;
+
+        // Phase 1: merge into existing partial slots with the same item
+        List<ItemHandlerSlotCache.SlotEntry> entries = cache.occupiedSlots.get(key);
+        if (entries != null) {
+            for (int i = 0; i < entries.size() && remaining > 0; i++) {
+                ItemHandlerSlotCache.SlotEntry entry = entries.get(i);
+                if (entry.count >= entry.limit) continue; // Slot already full
+
+                ItemStack toInsert = copyWithAmount(identity, remaining);
+                ItemStack leftover = itemHandler.insertItem(entry.slotIndex, toInsert, false);
+                int accepted = remaining - (leftover.isEmpty() ? 0 : leftover.getCount());
+
+                if (accepted > 0) {
+                    entry.count += accepted;
+                    remaining -= accepted;
+                    cache.totalCounts.merge(key, (long) accepted, Long::sum);
+                }
+            }
+        }
+
+        // Phase 2: fill empty slots
+        Iterator<ItemHandlerSlotCache.SlotEntry> emptyIter = cache.emptySlots.iterator();
+        while (emptyIter.hasNext() && remaining > 0) {
+            ItemHandlerSlotCache.SlotEntry emptyEntry = emptyIter.next();
+
+            ItemStack toInsert = copyWithAmount(identity, remaining);
+            ItemStack leftover = itemHandler.insertItem(emptyEntry.slotIndex, toInsert, false);
+            int accepted = remaining - (leftover.isEmpty() ? 0 : leftover.getCount());
+
+            if (accepted > 0) {
+                // Move from empty list to occupied map
+                emptyIter.remove();
+                ItemHandlerSlotCache.SlotEntry occupied = new ItemHandlerSlotCache.SlotEntry(
+                        emptyEntry.slotIndex, accepted, emptyEntry.limit);
+                cache.occupiedSlots.computeIfAbsent(key, k -> new ArrayList<>()).add(occupied);
+                cache.totalCounts.merge(key, (long) accepted, Long::sum);
+                remaining -= accepted;
+            }
+        }
+
+        return maxAmount - remaining;
+    }
+
+    @Override
+    @Nullable
+    protected Map<ItemStackKey, Long> buildResourceCountMap(Object handler, EnumFacing facing) {
+        // There is no worry about overflow here since capabilities are limited to int amounts
+        if (handler instanceof IItemRepository) {
+            Map<ItemStackKey, Long> map = new HashMap<>();
+            for (IItemRepository.ItemRecord record : ((IItemRepository) handler).getAllItems()) {
+                ItemStackKey key = ItemStackKey.of(record.itemPrototype);
+                if (key != null) map.merge(key, (long) record.count, Long::sum);
+            }
+
+            return map;
+        }
+
+        if (handler instanceof IItemHandler) {
+            // Build the slot cache (side effect: populates totalCounts). Subsequent
+            // extract/insert calls within this cycle will reuse the cached state.
+            // Returns the live totalCounts map so keepQuantity calculations
+            // automatically see post-mutation values from earlier filter iterations.
+            ItemHandlerSlotCache cache = getOrBuildCache((IItemHandler) handler);
+            return cache.totalCounts;
+        }
+
+        return null;
     }
 
     // ============================== Item-specific stream serialization ==============================
 
     /**
-     * Items need NBT-aware stream serialization since they can have complex NBT data.
-     * Override to use NBT serialization instead of name-based.
+     * Items use uncompressed NBT via ByteBufUtils for stream serialization.
+     * This is a "somewhat" hot path, so GZip is overkill
      */
     @Override
-    public boolean readStorageFromStream(ByteBuf data) {
-        boolean changed = false;
-
-        // Clear all storage first
-        for (int i = 0; i < STORAGE_SLOTS; i++) {
-            if (this.storage[i] != null) {
-                this.storage[i] = null;
-                changed = true;
-            }
-        }
-
-        int count = data.readShort();
-        for (int idx = 0; idx < count; idx++) {
-            int slot = data.readShort();
-            int nbtLen = data.readInt();
-
-            if (slot < 0 || slot >= STORAGE_SLOTS) {
-                // Skip this entry's NBT data
-                data.skipBytes(nbtLen);
-                continue;
-            }
-
-            byte[] nbtBytes = new byte[nbtLen];
-            data.readBytes(nbtBytes);
-
-            try {
-                NBTTagCompound tag = net.minecraft.nbt.CompressedStreamTools.readCompressed(
-                    new java.io.ByteArrayInputStream(nbtBytes)
-                );
-                ItemStack stack = new ItemStack(tag);
-                if (!stack.isEmpty()) {
-                    this.storage[slot] = stack;
-                    changed = true;
-                }
-            } catch (Exception e) {
-                // Log and skip corrupted data
-            }
-        }
-
-        return changed;
+    protected void writeResourceToStream(ItemStack resource, ByteBuf data) {
+        NBTTagCompound tag = resource.writeToNBT(new NBTTagCompound());
+        ByteBufUtils.writeTag(data, tag);
     }
 
     /**
-     * Items need NBT-aware stream serialization since they can have complex NBT data.
+     * Read an NBT-encoded ItemStack from the stream.
+     * @return The item, or null if data is corrupted or empty.
      */
     @Override
-    public void writeStorageToStream(ByteBuf data) {
-        // Count non-empty storage slots first
-        int count = 0;
-        for (int i = 0; i < STORAGE_SLOTS; i++) {
-            if (this.storage[i] != null && !this.storage[i].isEmpty()) count++;
-        }
+    @Nullable
+    protected ItemStack readResourceFromStream(ByteBuf data) {
+        NBTTagCompound tag = ByteBufUtils.readTag(data);
+        if (tag == null) return null;
 
-        data.writeShort(count);
-
-        for (int i = 0; i < STORAGE_SLOTS; i++) {
-            ItemStack stack = this.storage[i];
-            if (stack == null || stack.isEmpty()) continue;
-
-            data.writeShort(i);
-
-            try {
-                NBTTagCompound tag = stack.writeToNBT(new NBTTagCompound());
-                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-                net.minecraft.nbt.CompressedStreamTools.writeCompressed(tag, baos);
-                byte[] nbtBytes = baos.toByteArray();
-
-                data.writeInt(nbtBytes.length);
-                data.writeBytes(nbtBytes);
-            } catch (Exception e) {
-                // Write empty on error
-                data.writeInt(0);
-            }
-        }
-    }
-
-    /**
-     * Items need NBT-aware filter stream serialization.
-     */
-    @Override
-    public boolean readFiltersFromStream(ByteBuf data) {
-        boolean changed = false;
-
-        // Clear all filters first
-        for (int i = 0; i < FILTER_SLOTS; i++) {
-            if (this.filters[i] != null) {
-                this.filters[i] = null;
-                changed = true;
-            }
-        }
-
-        int count = data.readShort();
-        for (int idx = 0; idx < count; idx++) {
-            int slot = data.readShort();
-            int nbtLen = data.readInt();
-
-            if (slot < 0 || slot >= FILTER_SLOTS) {
-                data.skipBytes(nbtLen);
-                continue;
-            }
-
-            byte[] nbtBytes = new byte[nbtLen];
-            data.readBytes(nbtBytes);
-
-            try {
-                NBTTagCompound tag = net.minecraft.nbt.CompressedStreamTools.readCompressed(
-                    new java.io.ByteArrayInputStream(nbtBytes)
-                );
-                ItemStack stack = new ItemStack(tag);
-                if (!stack.isEmpty()) {
-                    stack.setCount(1); // Filters are always count 1
-                    this.filters[slot] = stack;
-                    changed = true;
-                }
-            } catch (Exception e) {
-                // Log and skip corrupted data
-            }
-        }
-
-        this.refreshFilterMap();
-        return changed;
-    }
-
-    /**
-     * Items need NBT-aware filter stream serialization.
-     */
-    @Override
-    public void writeFiltersToStream(ByteBuf data) {
-        // Count non-empty filters first
-        int count = 0;
-        for (int i = 0; i < FILTER_SLOTS; i++) {
-            if (this.filters[i] != null) count++;
-        }
-
-        data.writeShort(count);
-
-        for (int i = 0; i < FILTER_SLOTS; i++) {
-            ItemStack filter = this.filters[i];
-            if (filter == null) continue;
-
-            data.writeShort(i);
-
-            try {
-                NBTTagCompound tag = filter.writeToNBT(new NBTTagCompound());
-                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-                net.minecraft.nbt.CompressedStreamTools.writeCompressed(tag, baos);
-                byte[] nbtBytes = baos.toByteArray();
-
-                data.writeInt(nbtBytes.length);
-                data.writeBytes(nbtBytes);
-            } catch (Exception e) {
-                data.writeInt(0);
-            }
-        }
+        ItemStack stack = new ItemStack(tag);
+        return stack.isEmpty() ? null : stack;
     }
 
     // ============================== Item-specific NBT format ==============================
@@ -437,7 +575,7 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
                 int slot = itemTag.getInteger("Slot");
                 if (slot >= 0 && slot < FILTER_SLOTS) {
                     ItemStack stack = new ItemStack(itemTag);
-                    this.filters[slot] = stack.isEmpty() ? null : stack;
+                    this.inventoryManager.setFilterDirect(slot, stack.isEmpty() ? null : stack);
                 }
             }
             return;
@@ -468,7 +606,7 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
                 int slot = itemTag.getInteger("Slot");
                 if (slot >= 0 && slot < STORAGE_SLOTS) {
                     ItemStack stack = new ItemStack(itemTag);
-                    this.storage[slot] = stack.isEmpty() ? null : stack;
+                    this.setResourceInSlotWithAmount(slot, stack.isEmpty() ? null : stack, stack.isEmpty() ? 0 : stack.getCount());
                 }
             }
         }
@@ -530,7 +668,7 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
                 int slot = itemTag.getInteger("Slot");
                 if (slot >= 0 && slot < STORAGE_SLOTS) {
                     ItemStack stack = new ItemStack(itemTag);
-                    this.storage[slot] = stack.isEmpty() ? null : stack;
+                    this.setResourceInSlotWithAmount(slot, stack.isEmpty() ? null : stack, stack.isEmpty() ? 0 : stack.getCount());
                 }
             }
             return;
@@ -558,7 +696,7 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
 
             if (slot >= 0 && slot < STORAGE_SLOTS) {
                 ItemStack stack = new ItemStack(storageMap.getCompoundTag(slotKey));
-                this.storage[slot] = stack.isEmpty() ? null : stack;
+                this.setResourceInSlotWithAmount(slot, stack.isEmpty() ? null : stack, stack.isEmpty() ? 0 : stack.getCount());
             }
         }
     }
@@ -585,7 +723,7 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
         @Override
         public int getSlots() {
             // Expose 1 dummy slot so hoppers see an empty slot and don't think we're full.
-            return 1 + logic.filterSlotList.size();
+            return 1 + logic.getFilterSlotList().size();
         }
 
         @Nonnull
@@ -596,11 +734,17 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
 
             // Slots 1 through filterSlotList.size() are actual filter slots
             int filterIndex = slot - 1;
-            if (filterIndex >= logic.filterSlotList.size()) return ItemStack.EMPTY;
+            if (filterIndex >= logic.getFilterSlotList().size()) return ItemStack.EMPTY;
 
-            int storageSlot = logic.filterSlotList.get(filterIndex);
-            ItemStack stack = logic.storage[storageSlot];
-            return stack != null ? stack : ItemStack.EMPTY;
+            int storageSlot = logic.getFilterSlotList().get(filterIndex);
+            ItemStack identity = logic.getStorageIdentity(storageSlot);
+            if (identity == null) return ItemStack.EMPTY;
+
+            long amount = logic.getSlotAmount(storageSlot);
+            if (amount <= 0) return ItemStack.EMPTY;
+
+            // Create stack with actual amount, clamped to int for API
+            return logic.copyWithAmount(identity, (int) Math.min(amount, Integer.MAX_VALUE));
         }
 
         @Nonnull
@@ -621,7 +765,15 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
 
         @Override
         public int getSlotLimit(int slot) {
-            return logic.maxSlotSize;
+            // Slot 0 is the dummy slot, use global max
+            if (slot <= 0) return logic.inventoryManager.getMaxSlotSizeInt();
+
+            // Map external slot to internal storage slot for per-slot override
+            int filterIndex = slot - 1;
+            if (filterIndex >= logic.getFilterSlotList().size()) return logic.inventoryManager.getMaxSlotSizeInt();
+
+            int storageSlot = logic.getFilterSlotList().get(filterIndex);
+            return (int) Math.min(logic.inventoryManager.getEffectiveMaxSlotSize(storageSlot), Integer.MAX_VALUE);
         }
 
         @Override
@@ -630,7 +782,7 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
             ItemStackKey key = ItemStackKey.of(stack);
             if (key == null) return false;
 
-            return logic.filterToSlotMap.containsKey(key);
+            return logic.containsFilterKey(key);
         }
 
         // ============================== IItemRepository (bulk slotless access) ==============================
@@ -640,13 +792,18 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
         public NonNullList<ItemRecord> getAllItems() {
             NonNullList<ItemRecord> items = NonNullList.create();
 
-            for (int filterIdx : logic.filterSlotList) {
-                ItemStack stack = logic.storage[filterIdx];
-                if (stack != null && !stack.isEmpty()) {
-                    ItemStack prototype = stack.copy();
-                    prototype.setCount(1);
-                    items.add(new ItemRecord(prototype, stack.getCount()));
-                }
+            for (int filterIdx : logic.getFilterSlotList()) {
+                ItemStack identity = logic.getStorageIdentity(filterIdx);
+                if (identity == null) continue;
+
+                long amount = logic.getSlotAmount(filterIdx);
+                if (amount <= 0) continue;
+
+                // Prototype with count=1, actual count from amounts[]
+                ItemStack prototype = identity.copy();
+                prototype.setCount(1);
+                // Clamp to int for ItemRecord API
+                items.add(new ItemRecord(prototype, (int) Math.min(amount, Integer.MAX_VALUE)));
             }
 
             return items;
@@ -672,6 +829,9 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
     /**
      * Wrapper handler that exposes storage slots for extraction only.
      * Does not allow external insertion (export-only interface).
+     * <p>
+     * Updated for parallel amounts array: storage[] holds identity (count=1),
+     * amounts[] holds actual count as long.
      */
     private static class ExportStorageHandler implements IItemHandler, IItemRepository {
         private final ItemInterfaceLogic logic;
@@ -682,17 +842,23 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
 
         @Override
         public int getSlots() {
-            return logic.filterSlotList.size();
+            return logic.getFilterSlotList().size();
         }
 
         @Nonnull
         @Override
         public ItemStack getStackInSlot(int slot) {
-            if (slot < 0 || slot >= logic.filterSlotList.size()) return ItemStack.EMPTY;
+            if (slot < 0 || slot >= logic.getFilterSlotList().size()) return ItemStack.EMPTY;
 
-            int storageSlot = logic.filterSlotList.get(slot);
-            ItemStack stack = logic.storage[storageSlot];
-            return stack != null ? stack : ItemStack.EMPTY;
+            int storageSlot = logic.getFilterSlotList().get(slot);
+            ItemStack identity = logic.getStorageIdentity(storageSlot);
+            if (identity == null) return ItemStack.EMPTY;
+
+            long amount = logic.getSlotAmount(storageSlot);
+            if (amount <= 0) return ItemStack.EMPTY;
+
+            // Create stack with actual amount, clamped to int for API
+            return logic.copyWithAmount(identity, (int) Math.min(amount, Integer.MAX_VALUE));
         }
 
         @Nonnull
@@ -705,16 +871,19 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
         @Nonnull
         @Override
         public ItemStack extractItem(int slot, int amount, boolean simulate) {
-            if (slot < 0 || slot >= logic.filterSlotList.size()) return ItemStack.EMPTY;
+            if (slot < 0 || slot >= logic.getFilterSlotList().size()) return ItemStack.EMPTY;
 
-            int storageSlot = logic.filterSlotList.get(slot);
+            int storageSlot = logic.getFilterSlotList().get(slot);
             ItemStack result = logic.drainFromSlot(storageSlot, amount, !simulate);
             return result != null ? result : ItemStack.EMPTY;
         }
 
         @Override
         public int getSlotLimit(int slot) {
-            return logic.maxSlotSize;
+            if (slot < 0 || slot >= logic.getFilterSlotList().size()) return logic.inventoryManager.getMaxSlotSizeInt();
+
+            int storageSlot = logic.getFilterSlotList().get(slot);
+            return (int) Math.min(logic.inventoryManager.getEffectiveMaxSlotSize(storageSlot), Integer.MAX_VALUE);
         }
 
         @Override
@@ -730,13 +899,18 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
         public NonNullList<ItemRecord> getAllItems() {
             NonNullList<ItemRecord> items = NonNullList.create();
 
-            for (int filterIdx : logic.filterSlotList) {
-                ItemStack stack = logic.storage[filterIdx];
-                if (stack != null && !stack.isEmpty()) {
-                    ItemStack prototype = stack.copy();
-                    prototype.setCount(1);
-                    items.add(new ItemRecord(prototype, stack.getCount()));
-                }
+            for (int filterIdx : logic.getFilterSlotList()) {
+                ItemStack identity = logic.getStorageIdentity(filterIdx);
+                if (identity == null) continue;
+
+                long amount = logic.getSlotAmount(filterIdx);
+                if (amount <= 0) continue;
+
+                // Prototype with count=1, actual count from amounts[]
+                ItemStack prototype = identity.copy();
+                prototype.setCount(1);
+                // Clamp to int for ItemRecord API
+                items.add(new ItemRecord(prototype, (int) Math.min(amount, Integer.MAX_VALUE)));
             }
 
             return items;
@@ -759,7 +933,7 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
             ItemStackKey key = ItemStackKey.of(stack);
             if (key == null) return ItemStack.EMPTY;
 
-            Integer targetSlot = logic.filterToSlotMap.get(key);
+            Integer targetSlot = logic.getFilterSlotForKey(key);
             if (targetSlot == null) return ItemStack.EMPTY;
 
             ItemStack result = logic.drainFromSlot(targetSlot, amount, !simulate);
@@ -768,45 +942,64 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
     }
 
     /**
-     * Simple IItemHandlerModifiable wrapper around a static ItemStack[] array.
-     * Used to expose the filter and storage arrays as IItemHandler for GUI slots.
+     * IItemHandlerModifiable wrapper that provides GUI-facing access to interface slots.
+     * Uses accessor methods rather than direct array references for proper encapsulation.
      * Converts null entries to ItemStack.EMPTY for IItemHandler API compatibility.
      */
     private class ArrayItemHandler implements IItemHandlerModifiable {
-        private final ItemStack[] array;
+        private final int slotCount;
         private final boolean isGhostSlot;
 
         /**
-         * @param array The underlying ItemStack array (may contain null entries)
+         * @param slotCount The number of slots this handler exposes
          * @param isGhostSlot If true, stacks are always copied and set to count 1 (filter behavior)
          */
-        public ArrayItemHandler(ItemStack[] array, boolean isGhostSlot) {
-            this.array = array;
+        public ArrayItemHandler(int slotCount, boolean isGhostSlot) {
+            this.slotCount = slotCount;
             this.isGhostSlot = isGhostSlot;
         }
 
         @Override
         public int getSlots() {
-            return array.length;
+            return slotCount;
         }
 
         @Nonnull
         @Override
         public ItemStack getStackInSlot(int slot) {
-            if (slot < 0 || slot >= array.length) return ItemStack.EMPTY;
-            ItemStack stack = array[slot];
-            return stack != null ? stack : ItemStack.EMPTY;
+            if (slot < 0 || slot >= slotCount) return ItemStack.EMPTY;
+
+            if (isGhostSlot) {
+                // Ghost slots always return the filter identity with count 1
+                ItemStack filter = getRawFilter(slot);
+                return filter != null ? filter : ItemStack.EMPTY;
+            } else {
+                // Storage slots: combine identity with amount (capped at int max)
+                ItemStack identity = getStorageIdentity(slot);
+                if (identity == null) return ItemStack.EMPTY;
+
+                long amount = getSlotAmount(slot);
+                if (amount <= 0) return ItemStack.EMPTY;
+
+                ItemStack result = identity.copy();
+                result.setCount((int) Math.min(amount, Integer.MAX_VALUE));
+                return result;
+            }
         }
 
         @Override
         public void setStackInSlot(int slot, @Nonnull ItemStack stack) {
-            if (slot < 0 || slot >= array.length) return;
+            if (slot < 0 || slot >= slotCount) return;
 
             // Convert EMPTY to null for consistency with fluid/gas pattern
             if (stack.isEmpty()) {
-                array[slot] = null;
-
-                if (isGhostSlot) onFilterChanged(slot);
+                if (isGhostSlot) {
+                    inventoryManager.setFilterDirect(slot, null);
+                    onFilterChanged(slot);
+                } else {
+                    setResourceInSlotWithAmount(slot, null, 0);
+                    host.markDirtyAndSave();
+                }
                 return;
             }
 
@@ -814,10 +1007,18 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
                 // Ghost slots store only a single item as a filter template
                 ItemStack ghost = stack.copy();
                 ghost.setCount(1);
-                array[slot] = ghost;
+                inventoryManager.setFilterDirect(slot, ghost);
                 onFilterChanged(slot);
             } else {
-                array[slot] = stack;
+                // Storage slots: store identity (count=1) and amount separately
+                // Note: ItemStack.getCount() returns int, but we preserve the full value
+                // since setStackInSlot is only called from GUI which caps at int anyway.
+                // For values > int max, use adjustSlotAmount() instead.
+                ItemStack identity = stack.copy();
+                long amount = identity.getCount();
+                identity.setCount(1);
+                setResourceInSlotWithAmount(slot, identity, amount);
+                host.markDirtyAndSave();
             }
         }
 
@@ -838,7 +1039,8 @@ public class ItemInterfaceLogic extends AbstractResourceInterfaceLogic<ItemStack
 
         @Override
         public int getSlotLimit(int slot) {
-            return isGhostSlot ? 1 : maxSlotSize;
+            if (isGhostSlot) return 1;
+            return (int) Math.min(inventoryManager.getEffectiveMaxSlotSize(slot), Integer.MAX_VALUE);
         }
     }
 }

@@ -21,19 +21,38 @@ import appeng.util.SettingsFrom;
  */
 public interface IInterfaceHost {
 
+    long validateMaxSlotSize(long size);
+
+    long getMaxSlotSize();
+
+    long setMaxSlotSize(long size);
+
+    // ================================= Per-Slot Size Overrides =================================
+
     /**
-     * Mark this host for a network update to sync changes to clients.
-     * Should be called whenever storage or visible state changes.
+     * Get the effective size for a specific slot (override or global maxSlotSize).
      */
-    void markForNetworkUpdate();
+    long getEffectiveMaxSlotSize(int slot);
 
-    int getMaxSlotSize();
+    /**
+     * Set a per-slot size override.
+     * @return The validated override size.
+     */
+    long setMaxSlotSizeOverride(int slot, long size);
 
-    void setMaxSlotSize(int size);
+    /**
+     * Get the per-slot size override, or -1 if no override is set.
+     */
+    long getMaxSlotSizeOverride(int slot);
+
+    /**
+     * Clear the per-slot size override, reverting to global maxSlotSize.
+     */
+    void clearMaxSlotSizeOverride(int slot);
 
     int getPollingRate();
 
-    void setPollingRate(int ticks);
+    int setPollingRate(int ticks);
 
     /**
      * @return true if this is an export interface, false if import.
@@ -105,9 +124,4 @@ public interface IInterfaceHost {
      * Does NOT include upgrades (those stay in the source interface).
      */
     NBTTagCompound downloadSettingsWithFilter();
-
-    /**
-     * Check if an item is a valid upgrade for this interface.
-     */
-    boolean isValidUpgrade(ItemStack stack);
 }

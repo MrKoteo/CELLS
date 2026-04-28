@@ -8,6 +8,146 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Semantic Versioning: https://semver.org/spec/v2.0.0.html
 
 
+## [0.6.0-alpha] - 2026-04-30
+### Added
+- Add the Subnet Proxy (front/back), 2 parts that allow to create a unidirectional subnet (passthrough) with optional filtering. The filtering is done in pages, with each capacity card allowing for an additional page of 63 filters. All 4 types are combined in the filter, with a button to cycle which type should be encoded on drag-and-drop/shift-click/quick-add. The Subnet Proxy will only expose the content of the network it is connected to (no showing looping content). The local content is propagated to the connected network + 1 level of subnet proxies, allowing for A -> B -> A -> C -> A setups where C is aware B without looping to A.
+- Subnet Proxy Insertion Card: when installed, the proxy also forwards matching items in the reverse direction (front-grid → back-grid), letting items inserted on the front side be pushed back into the back-grid storage if they pass the filter and priority routing.
+- Add a config to set the number of upgrade slots for Subnet Proxies (1-24).
+- Add IO Interfaces for all types (except combined). These interfaces combine Import and Export as 2 inventories (avoiding interferences).
+- Add an Essentia Container Blacklist config to specify tile entities by registry ID, preventing the Essentia Interface's Push/Pull card from interacting with buggy containers.
+- Add protective checks for possible null aspects from outside mods in the Essentia Interface, to prevent crashes. This should never happen if the other mods do their job properly, but Thaumcraft addons are known to be all kinds of janky.
+- Add a toggle arrow button before the title in all Interface GUIs to show/hide the Controls Help panel. The visibility state is persisted across sessions.
+
+### Fixed
+- Fix Memory Card wiping upgrades in the receiving interface when transferring data.
+- Fix Controls Help being able to go out of the screen when the screen is too small, causing a crash.
+
+
+## [0.5.15-beta] - 2026-04-15
+### Fixed
+- Fix Memory Card not saving filters of Essentia Interfaces.
+- Fix Combined Interface crashing on opening when Mekanism/Thaumcraft wasn't there.
+
+### Added
+- Add a line in Interfaces' Controls Help to clarify Memory Card use.
+
+### Changed
+- Re-texture Push/Pull cards slightly.
+
+
+## [0.5.14-beta2] - 2026-04-13
+### Fixed
+- Fix crash with push card and Thaumatorium when no recipe is set.
+
+### Added
+- Add I/O Interface for all resource types (Item, Fluid, Gas, Essentia). Combines an Import and Export Interface into a single block, with the same filtering and upgrade capabilities as the Import/Export Interfaces.
+
+
+## [0.5.14-beta] - 2026-04-12
+### Fixed
+- Fix some fields missing from the in-game config.
+- Fix severe performance regression in interface client sync: replace per-ItemStack GZIP compression with lightweight NBT encoding, and move indiscriminate client sync of all interfaces to only the one GUI the player has open.
+- Fix max slot size values under 1000 being silently discarded.
+- Fix `/inspectSlots` only showing the first detected capability instead of all of them.
+- Fix push/pull-card affecting all sides of a parts, instead of just the facing side.
+- Fix push/pull-card not registering containers at world start, in some cases.
+- Fix pull card voiding items after pushing to network.
+
+### Added
+- Add Universal Import/Export Interface, variants that combine all 4 types into 1.
+- Add config to switch interfaces to non-animated textures.
+- Add per-slot max capacity override.
+- Add message overlay system for in-game feedback (success/error/warning messages above the hotbar).
+
+### Changed
+- Change the slot display from "current" to "current / max", to show how full the slot is.
+- Change "flattened" config to categories
+- Change `/inspectSlots` to show all capabilities of a block sequentially instead of only the first match.
+
+
+## [0.5.13-beta2] - 2026-04-09
+### Fixed
+- Fix Export Essentia Interface exposing 0 essentia when polled, resulting in no essentia being exported.
+- Fix negative buttons in Max Slot Size GUI resetting the value to 1 (instead of adding the negative delta).
+- Fix auto-pull/push card disabling network IO when no adjacent inventory is present (e.g., removing all chests adjacent to the interface would stop it from importing/exporting to the ME network altogether).
+- Fix Import/Export Interface's Controls Help not having a JEI exclusion area.
+
+### Added
+- Optimize the hot path for all cells.
+
+
+## [0.5.13-beta] - 2026-04-06
+### Fixed
+- Fix (long overdue) issues with the Compacting Cells :
+  - Fix possible overflows in compression chain with 10+ tiers.
+  - Fix possible race condition in compression chain handling.
+  - Fix some cases where adding/removing a Compression/Decompression card would not update the compression chain, while resizing the chain array (resulting in stale or incorrect chain being used).
+
+### Note
+- After removing a Compression/Decompression card, the compression chain may not automatically shrink until the cell is reinserted or another Compression/Decompression card is inserted. This should be harmless, as the next chunk load or force update should reload the cell. It may allow to use 1 card for multiple cells, but if you're that dedicated, I will not stop you...
+
+
+## [0.5.12-beta2] - 2026-04-06
+### Added
+- Add in-interface GUI for Pull/Push Cards. This way, you can configure the card without removing it and inserting it back.
+
+
+## [0.5.12-beta] - 2026-04-05
+### Fixed
+- Fix Fluid (Hyper-Density/Configurable), Gas (Configurable), and Essentia (Configurable) partitions using Item config, which allowed items to be encoded even if they were not valid for this specific cell type. Items are now correctly validated at encoding time. Re-encoding should not be required for cells that already have a valid partition, but it's always good to do it in order to remove invalid items.
+
+### Added
+- Optimize some Push/Pull Card logic.
+- Optimize getAvailableItems (protoStack caching and NBT bypass) for all cell types.
+- Mention Push/Pull Cards in the controls help widget and the README.
+- Add the /inspectSlots command, to show details about the slots of the block the player is looking at.
+
+### Changed
+- Move the Controls Help from bottom of the GUI to centered vertically.
+
+### Technical
+- Adaptive Mode is set to 1s (20 ticks) when a Push/Pull Card is present, to prevent excessive ticking and network I/O. The card can tick faster (e.g., every tick), but network I/O is throttled to a set minimum to prevent lag. Considering normal Adaptive mode can 
+- External Capacilities' slots for Keep Quantity are now queried once instead of once per item in filter.
+- IItemRepository is now queried instead of IItemHandler when the TE supports it.
+- Slots' content and space is now cached between IItemHandler calls (in the same tick), to avoid redundant queries.
+
+
+## [0.5.12-alpha2] - 2026-04-02
+### Changed
+- Clean tooltips to better convey intents and behaviors.
+- Change the recipe of Equal Distribution and Compression/Decompression cards, as it's more a configuration than balance.
+
+
+## [0.5.12-alpha] - 2026-03-31
+### Added
+- Implement Auto-Pull and Auto-Push Card functionality for all resource interfaces (Item, Fluid, Gas, Essentia). Cards can be configured with transfer quantity, interval, and keep-quantity to automatically move resources between adjacent inventories and the ME network buffer.
+- Optimize the I/O both from and to the Interfaces.
+
+
+## [0.5.11-beta2] - 2026-03-30
+### Fixed
+- Fix Essentia Storage Bus having caching issues with our interfaces (this is a bug from Thaumic Energistics). This fix makes the Essentia Interface itself handle all the work for the Bus and force changes onto it. This will not fix *any* other block you put the Bus on, either fix the Storage Bus or do the work yourself.
+- Fix Interface tiles not showing on Network Tool.
+- Fix migration of Export Fluid Interfaces from 0.5.9-rc.
+
+### Changed
+- Slight changes in Max Slot Size's typing behavior.
+
+
+## [0.5.11-beta] - 2026-03-28
+### Fixed
+- Fix some Upgrades not showing anymore in JEI/Creative Tab.
+
+### Added
+- Increase the max slot size limit from 2.1B to 9.2 quintillion (Long.MAX_VALUE), to allow for really high throughput I/O or long waiting times.
+- Make max slot size GUI more readable.
+- Add Items to the Recovery Orb for quantities above Max Int (cannot hold more than max int in an ItemStack).
+- Add a config option to limit the max slot size that players are allowed to set, as a way to balance the potential "bottomless storage" aspect of the interfaces.
+- Add a config option for the minimum polling rate, to allow reducing the strain on servers.
+- Add recipes for Gas/Essentia Import/Export Interfaces.
+- Add Auto-pull/Auto-push cards for Import/Export Interfaces, which automatically pull/push items from/to adjacent inventories. The pull/push interval is set in the card's GUI and can be different for each card. The logic is not yet implemented and will come in a future update.
+
+
 ## [0.5.10-beta3] - 2026-03-27
 ### Fixed
 - Fix incorrect use of server-side I18n on several places.

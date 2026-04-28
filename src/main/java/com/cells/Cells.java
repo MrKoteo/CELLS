@@ -21,6 +21,7 @@ import com.jaquadro.minecraft.storagedrawers.api.capabilities.IItemRepository;
 
 import com.cells.cells.configurable.ComponentHelper;
 import com.cells.commands.FillCellCommand;
+import com.cells.commands.InspectSlotCommand;
 import com.cells.config.CellsConfig;
 import com.cells.gui.CellsGuiHandler;
 import com.cells.network.CellsNetworkHandler;
@@ -60,6 +61,9 @@ public class Cells {
             CapabilityManager.INSTANCE.register(IItemRepository.class, new IItemRepository.NullStorage(), IItemRepository.NullImpl::new);
         }
 
+        // Register data fixers for tile entity ID migration (must happen before any world is loaded)
+        CellsDataFixer.register();
+
         // Initialize configuration
         File configDir = event.getModConfigurationDirectory();
         CellsConfig.init(new File(configDir, Tags.MODID + ".cfg"));
@@ -96,5 +100,6 @@ public class Cells {
     @EventHandler
     public void serverStarting(FMLServerStartingEvent event) {
         event.registerServerCommand(new FillCellCommand());
+        event.registerServerCommand(new InspectSlotCommand());
     }
 }

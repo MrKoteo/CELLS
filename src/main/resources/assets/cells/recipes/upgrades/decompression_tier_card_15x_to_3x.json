@@ -1,0 +1,14 @@
+{
+    "type": "minecraft:crafting_shapeless",
+    "ingredients": [
+        {
+            "item": "cells:decompression_tier_card",
+            "data": 4
+        }
+    ],
+    "result": {
+        "item": "cells:decompression_tier_card",
+        "count": 1,
+        "data": 0
+    }
+}

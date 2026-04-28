@@ -27,6 +27,11 @@ public interface IGasInterfaceHost
      */
     GasStack getGasInTank(int slot);
 
+    @Override
+    default long getGasAmount(int slot) {
+        return getInterfaceLogic().getSlotAmount(slot);
+    }
+
     /**
      * Set the gas in a tank slot (for import interface gas pouring).
      *
@@ -34,17 +39,6 @@ public interface IGasInterfaceHost
      * @param gas The gas to set, or null to clear
      */
     void setGasInTank(int slot, @Nullable GasStack gas);
-
-    /**
-     * Insert gas into a tank slot (import interfaces only).
-     *
-     * @param slot The tank slot index
-     * @param gas The gas to insert
-     * @return The amount actually inserted
-     */
-    default int insertGasIntoTank(int slot, GasStack gas) {
-        throw new UnsupportedOperationException("insertGasIntoTank is only supported on import interfaces");
-    }
 
     /**
      * Extract gas from a tank slot (export interfaces only).

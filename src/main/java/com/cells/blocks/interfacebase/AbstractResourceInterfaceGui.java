@@ -24,21 +24,29 @@ import appeng.client.gui.AEBaseGui;
 import appeng.client.gui.widgets.GuiCustomSlot;
 import appeng.container.AEBaseContainer;
 import appeng.container.interfaces.IJEIGhostIngredients;
+import appeng.tile.inventory.AppEngInternalInventory;
 
 import mezz.jei.api.gui.IGhostIngredientHandler.Target;
 
 import com.cells.Tags;
+import com.cells.blocks.combinedinterface.ICombinedInterfaceHost;
 import com.cells.client.KeyBindings;
+import com.cells.config.CellsConfig;
 import com.cells.gui.DynamicTooltipTabButton;
 import com.cells.gui.GuiClearFiltersButton;
+import com.cells.gui.GuiControlsHelpToggleButton;
 import com.cells.gui.GuiPageNavigation;
+import com.cells.gui.GuiPullPushUpgradeButton;
 import com.cells.gui.ImportInterfaceControlsHelper;
 import com.cells.gui.slots.AbstractResourceFilterSlot;
 import com.cells.gui.slots.AbstractResourceTankSlot;
+import com.cells.items.ItemAutoPullCard;
+import com.cells.items.ItemAutoPushCard;
 import com.cells.network.CellsNetworkHandler;
 import com.cells.network.packets.PacketChangePage;
 import com.cells.network.packets.PacketClearFilters;
 import com.cells.network.packets.PacketOpenGui;
+import com.cells.network.packets.PacketOpenSlotOverrideGui;
 import com.cells.util.PollingRateUtils;
 
 
@@ -88,6 +96,8 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
     private DynamicTooltipTabButton pollingRateButton;
     private GuiClearFiltersButton clearFiltersButton;
     private GuiPageNavigation pageNavigation;
+    private GuiPullPushUpgradeButton pullPushButton;
+    private GuiControlsHelpToggleButton controlsToggleButton;
 
     // JEI ghost target mapping
     protected final Map<Object, Object> mapTargetSlot = new HashMap<>();
@@ -136,6 +146,24 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
     protected abstract void prevPage();
 
     /**
+     * Get the effective max slot size for a display slot, accounting for per-slot overrides.
+     * Uses the container's ISizeOverrideContainer implementation if available,
+     * falling back to the global max slot size.
+     *
+     * @param displaySlot The display slot index (0-35 within the current page)
+     * @return The effective slot size (per-slot override or global)
+     */
+    protected long getEffectiveMaxSlotSizeForDisplay(int displaySlot) {
+        int actualSlot = displaySlot + getCurrentPage() * SLOTS_PER_PAGE;
+
+        if (this.container instanceof ISizeOverrideContainer) {
+            return ((ISizeOverrideContainer) this.container).getEffectiveMaxSlotSize(actualSlot);
+        }
+
+        return getMaxSlotSize();
+    }
+
+    /**
      * Create a filter slot for the given display index.
      * Override in subclasses to return the appropriate filter slot type.
      *
@@ -174,6 +202,20 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
 
                 // Create filter slot
                 GuiCustomSlot filterSlot = createFilterSlotForIndex(displaySlot, xPos, filterY);
+
+                // Wire up right-click handler for per-slot size override
+                if (filterSlot instanceof AbstractResourceFilterSlot) {
+                    final int displayIndex = displaySlot;
+                    ((AbstractResourceFilterSlot<?>) filterSlot).setRightClickHandler(() -> {
+                        // Compute absolute slot from display index + page offset
+                        int absoluteSlot = displayIndex + getCurrentPage() * SLOTS_PER_PAGE;
+                        BlockPos pos = this.host.getHostPos();
+                        CellsNetworkHandler.INSTANCE.sendToServer(
+                            new PacketOpenSlotOverrideGui(pos, absoluteSlot, this.host.getPartSide())
+                        );
+                    });
+                }
+
                 this.guiSlots.add(filterSlot);
 
                 // Create tank/storage slot
@@ -197,6 +239,15 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
     protected abstract int getPollingRateGuiId();
 
     /**
+     * Get the type name used for unit localization (e.g. "item", "fluid", "gas", "essentia").
+     * <p>
+     * Defaults to {@code this.host.getTypeName()}, which works for single-type interfaces.
+     */
+    protected String getUnitTypeName() {
+        return this.host.getTypeName();
+    }
+
+    /**
      * Handle quick-add keybind. Override in subclasses to implement type-specific behavior.
      *
      * @param hoveredSlot The slot currently under the mouse (may be null)
@@ -211,6 +262,13 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        // Update pull/push button state (enabled/disabled, card icon)
+        if (this.pullPushButton != null) {
+            ItemStack card = findPullPushCard();
+            this.pullPushButton.setCardStack(card);
+            this.pullPushButton.enabled = !card.isEmpty();
+        }
+
         super.drawScreen(mouseX, mouseY, partialTicks);
 
         // Re-render the held item AFTER custom slots.
@@ -237,20 +295,37 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
     public void initGui() {
         super.initGui();
 
-        String unit = I18n.format("cells.unit." + this.host.getTypeName());
+        // Clear custom AE2 slots to prevent accumulation on GUI rebuild (e.g. window resize, tab switch).
+        this.guiSlots.clear();
+
         String direction = this.host.isExport() ? "export" : "import";
 
         // Create type-specific resource slots
         createResourceSlots();
 
+        // Toggle button to show/hide the controls help panel (placed before the title)
+        this.controlsToggleButton = new GuiControlsHelpToggleButton(
+            5,
+            this.guiLeft + 6,
+            this.guiTop + 6,  // title is at y=6
+            () -> CellsConfig.showControlsHelp
+                ? I18n.format("tooltip.cells.controls_help.hide")
+                : I18n.format("tooltip.cells.controls_help.show")
+        );
+        this.buttonList.add(this.controlsToggleButton);
+
         // Config button to open max slot size configuration screen
+        // Unit is resolved dynamically to allow for dynamic type
         this.configButton = new DynamicTooltipTabButton(
             this.guiLeft + 154,
             this.guiTop,
             2 + 4 * 16,
-            () -> I18n.format("cells.max_slot_size.title") + "\n\n"
-                + I18n.format("cells.slot_size", (int) this.getMaxSlotSize(), unit) + "\n"
-                + I18n.format("cells.max_slot_size.tooltip", unit),
+            () -> {
+                String unit = I18n.format("cells.unit." + this.getUnitTypeName());
+                return I18n.format("cells.max_slot_size.title") + "\n\n"
+                    + I18n.format("cells.slot_size", String.format("%,d", this.getMaxSlotSize()), unit) + "\n"
+                    + I18n.format("cells.max_slot_size.tooltip", unit);
+            },
             this.itemRender
         );
         this.buttonList.add(this.configButton);
@@ -300,13 +375,38 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
             }
         );
         this.buttonList.add(this.pageNavigation);
+
+        // Pull/Push upgrade button (below upgrade slots)
+        // When a Pull/Push card is installed in the upgrades, clicking this button
+        // opens the card's configuration GUI directly from the interface.
+        this.pullPushButton = new GuiPullPushUpgradeButton(
+            4,
+            this.guiLeft + 184,
+            this.guiTop + 104,
+            () -> {
+                ItemStack card = this.findPullPushCard();
+                if (card.isEmpty()) {
+                    String cardName = this.host.isExport()
+                        ? I18n.format("item.cells.push_card.name")
+                        : I18n.format("item.cells.pull_card.name");
+                    return I18n.format("cells.pull_push_button.disabled", cardName);
+                }
+
+                String title = I18n.format("cells.pull_push_button.enabled.title");
+                String desc = "§7" + I18n.format("cells.pull_push_button.enabled.desc");
+                return title + "\n\n" + desc;
+            },
+            this.itemRender
+        );
+        this.buttonList.add(this.pullPushButton);
     }
 
     @Override
     public void drawFG(int offsetX, int offsetY, int mouseX, int mouseY) {
-        // Draw title with truncation to avoid overlapping buttons
-        // Buttons start at x=132, so title max width is 132-8 = 124 pixels
-        final int maxTitleWidth = 124;
+        // Draw title with truncation to avoid overlapping buttons.
+        // The toggle arrow is at x=8 (8px wide), so the title starts at x=18 (8+8+2).
+        // Buttons start at x=132, so title max width is 132-18 = 114 pixels.
+        final int maxTitleWidth = 114;
         String title = I18n.format(this.host.getGuiTitleLangKey());
         int titleWidth = this.fontRenderer.getStringWidth(title);
 
@@ -324,16 +424,17 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
             title = title + ellipsis;
         }
 
-        this.fontRenderer.drawString(title, 8, 6, 0x404040);
+        this.fontRenderer.drawString(title, 18, 6, 0x404040);
 
-        // Draw controls help widget on the left side
-        ImportInterfaceControlsHelper.drawControlsHelpWidget(
-            this.fontRenderer,
-            this.guiLeft,
-            this.guiTop,
-            this.ySize,
-            !this.host.isExport()
-        );
+        // Draw controls help widget on the left side (only when enabled)
+        if (CellsConfig.showControlsHelp) {
+            ImportInterfaceControlsHelper.drawControlsHelpWidget(
+                this.fontRenderer,
+                this.guiLeft,
+                this.guiTop,
+                !this.host.isExport()
+            );
+        }
     }
 
     @Override
@@ -401,6 +502,26 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
         if (btn == this.clearFiltersButton) {
             CellsNetworkHandler.INSTANCE.sendToServer(new PacketClearFilters());
         }
+
+        if (btn == this.controlsToggleButton) {
+            CellsConfig.setShowControlsHelp(!CellsConfig.showControlsHelp);
+            return;
+        }
+
+        if (btn == this.pullPushButton && this.pullPushButton.enabled) {
+            BlockPos pullPushPos = this.host.getHostPos();
+            int guiId = this.host.isPart()
+                ? com.cells.gui.CellsGuiHandler.GUI_PART_PULL_PUSH_CARD_INTERFACE
+                : com.cells.gui.CellsGuiHandler.GUI_PULL_PUSH_CARD_INTERFACE;
+
+            if (this.host.isPart()) {
+                CellsNetworkHandler.INSTANCE.sendToServer(new PacketOpenGui(
+                    pullPushPos, guiId, this.host.getPartSide()));
+            } else {
+                CellsNetworkHandler.INSTANCE.sendToServer(new PacketOpenGui(
+                    pullPushPos.getX(), pullPushPos.getY(), pullPushPos.getZ(), guiId));
+            }
+        }
     }
 
     /**
@@ -455,6 +576,18 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
     public List<Rectangle> getJEIExclusionArea() {
         List<Rectangle> areas = new ArrayList<>(super.getJEIExclusionArea());
 
+        // Add controls help widget area on the left side (only when the panel is visible)
+        if (CellsConfig.showControlsHelp) {
+            Rectangle controlsBounds = ImportInterfaceControlsHelper.getBounds(
+                this.fontRenderer,
+                this.guiLeft,
+                this.guiTop,
+                !this.host.isExport()
+            );
+
+            if (controlsBounds.width > 0 && controlsBounds.height > 0) areas.add(controlsBounds);
+        }
+
         // Add toolbox extension area when present
         boolean hasToolbox = (this.container instanceof AbstractContainerInterface)
             && ((AbstractContainerInterface<?, ?, ?>) this.container).hasToolbox();
@@ -477,5 +610,40 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
         }
 
         super.keyTyped(typedChar, keyCode);
+    }
+
+    // ============================== Pull/Push card helpers ==============================
+
+    /**
+     * Scans the host's upgrade inventory for an installed Pull/Push card.
+     * Handles both single-type hosts (IFilterableInterfaceHost) and combined hosts
+     * (ICombinedInterfaceHost), which cannot implement IFilterableInterfaceHost due
+     * to Java's type erasure on its generic parameters.
+     *
+     * @return The card ItemStack, or {@link ItemStack#EMPTY} if none is installed.
+     */
+    @SuppressWarnings("rawtypes")
+    private ItemStack findPullPushCard() {
+        AppEngInternalInventory upgradeInv = null;
+
+        if (this.host instanceof IFilterableInterfaceHost) {
+            upgradeInv = ((IFilterableInterfaceHost) this.host).getUpgradeInventory();
+        } else if (this.host instanceof ICombinedInterfaceHost) {
+            // Combined hosts share one upgrade inventory across all logics, accessible via any logic
+            upgradeInv = ((ICombinedInterfaceHost) this.host).getItemLogic().getUpgradeInventory();
+        }
+
+        if (upgradeInv == null) return ItemStack.EMPTY;
+
+        for (int i = 0; i < upgradeInv.getSlots(); i++) {
+            ItemStack stack = upgradeInv.getStackInSlot(i);
+
+            if (stack.getItem() instanceof ItemAutoPullCard
+                || stack.getItem() instanceof ItemAutoPushCard) {
+                return stack;
+            }
+        }
+
+        return ItemStack.EMPTY;
     }
 }

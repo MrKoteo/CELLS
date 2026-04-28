@@ -36,6 +36,10 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
 
     // In-memory cache: FluidStackKey -> NBT index
     private final Map<FluidStackKey, Integer> keyToNbtIndex = new HashMap<>();
+    // Cached AEFluidStacks by NBT index, avoids expensive reconstruction in getAvailableItems
+    private final Map<Integer, IAEFluidStack> nbtIndexToFluidStack = new HashMap<>();
+    // Cached counts by NBT index, avoids NBT reads in getAvailableItems and getStoredCount
+    private final Map<Integer, Long> nbtIndexToCount = new HashMap<>();
     private final Map<FluidStackKey, Integer> fluidNbtSizes = new HashMap<>();
     private int cachedNextIndex = 0;
 
@@ -51,6 +55,8 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
         storedCount = 0;
         storedTypes = 0;
         keyToNbtIndex.clear();
+        nbtIndexToFluidStack.clear();
+        nbtIndexToCount.clear();
         fluidNbtSizes.clear();
         totalNbtSize = 0;
         cachedNextIndex = 0;
@@ -68,6 +74,8 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
                     if (index >= cachedNextIndex) cachedNextIndex = index + 1;
 
                     keyToNbtIndex.put(key, index);
+                    nbtIndexToFluidStack.put(index, channel.createStack(stack));
+                    nbtIndexToCount.put(index, count);
                     storedCount += count;
                     storedTypes++;
 
@@ -82,21 +90,26 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
         }
     }
 
-    private long getStoredCount(IAEFluidStack fluid) {
-        FluidStackKey key = FluidStackKey.of(fluid.getFluidStack());
-        if (key == null) return 0;
-
+    /**
+     * Get the stored fluid count using a pre-computed key.
+     * Avoids creating a new FluidStackKey (which deep-copies NBT) on every call.
+     */
+    private long getStoredCount(FluidStackKey key) {
         Integer index = keyToNbtIndex.get(key);
         if (index == null) return 0;
 
-        NBTTagCompound fluidsTag = tagCompound.getCompoundTag(NBT_FLUID_TYPE);
-        return fluidsTag.getCompoundTag(String.valueOf(index)).getLong(NBT_STORED_COUNT);
+        return nbtIndexToCount.getOrDefault(index, 0L);
     }
 
-    private void setStoredCount(IAEFluidStack fluid, long count) {
-        FluidStackKey key = FluidStackKey.of(fluid.getFluidStack());
-        if (key == null) return;
-
+    /**
+     * Set the stored count for a specific fluid using a pre-computed key.
+     * Only serializes the full fluid on first insert; subsequent updates only change the count.
+     *
+     * @param fluid The AE fluid stack (needed for serialization of new fluids)
+     * @param key   Pre-computed FluidStackKey to avoid duplicate NBT deep-copy
+     * @param count The new count to set
+     */
+    private void setStoredCount(IAEFluidStack fluid, FluidStackKey key, long count) {
         NBTTagCompound fluidsTag = tagCompound.getCompoundTag(NBT_FLUID_TYPE);
         Integer index = keyToNbtIndex.get(key);
 
@@ -108,11 +121,14 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
 
                 fluidsTag.removeTag(String.valueOf(index));
                 keyToNbtIndex.remove(key);
+                nbtIndexToFluidStack.remove(index);
+                nbtIndexToCount.remove(index);
             }
         } else if (index != null) {
             // Update count only - NBT size change is minimal
             NBTTagCompound fluidTag = fluidsTag.getCompoundTag(String.valueOf(index));
             fluidTag.setLong(NBT_STORED_COUNT, count);
+            nbtIndexToCount.put(index, count);
         } else {
             index = cachedNextIndex++;
             NBTTagCompound fluidTag = new NBTTagCompound();
@@ -120,6 +136,8 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
             fluidTag.setLong(NBT_STORED_COUNT, count);
             fluidsTag.setTag(String.valueOf(index), fluidTag);
             keyToNbtIndex.put(key, index);
+            nbtIndexToFluidStack.put(index, fluid.copy());
+            nbtIndexToCount.put(index, count);
 
             // Track NBT size for this new fluid (if enabled)
             if (CellsConfig.enableNbtSizeTooltip) {
@@ -127,9 +145,12 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
                 fluidNbtSizes.put(key, fluidSize);
                 totalNbtSize += fluidSize;
             }
-        }
 
-        tagCompound.setTag(NBT_FLUID_TYPE, fluidsTag);
+            // Only set the parent tag reference when adding a new fluid, the compound may
+            // not be in the parent yet (first fluid ever). For updates/removals, the compound
+            // is already referenced from the parent and modifications are reflected automatically.
+            tagCompound.setTag(NBT_FLUID_TYPE, fluidsTag);
+        }
     }
 
     // =====================
@@ -145,7 +166,11 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
     public IAEFluidStack injectItems(IAEFluidStack input, Actionable mode, IActionSource src) {
         if (input == null || input.getStackSize() <= 0) return null;
 
-        long existingCount = getStoredCount(input);
+        // Compute key once to avoid duplicate NBT deep-copy in getStoredCount + setStoredCount
+        FluidStackKey key = FluidStackKey.of(input.getFluidStack());
+        if (key == null) return input;
+
+        long existingCount = getStoredCount(key);
         boolean isNewType = existingCount == 0;
 
         if (isNewType && storedTypes >= maxTypes) return input;
@@ -163,7 +188,7 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
         if (mode == Actionable.MODULATE) {
             if (isNewType) storedTypes++;
 
-            setStoredCount(input, existingCount + toInsert);
+            setStoredCount(input, key, existingCount + toInsert);
             storedCount += toInsert;
             saveChangesDeferred();
         }
@@ -181,14 +206,18 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
     public IAEFluidStack extractItems(IAEFluidStack request, Actionable mode, IActionSource src) {
         if (request == null || request.getStackSize() <= 0) return null;
 
-        long existingCount = getStoredCount(request);
+        // Compute key once to avoid duplicate NBT deep-copy in getStoredCount + setStoredCount
+        FluidStackKey key = FluidStackKey.of(request.getFluidStack());
+        if (key == null) return null;
+
+        long existingCount = getStoredCount(key);
         if (existingCount <= 0) return null;
 
         long toExtract = Math.min(request.getStackSize(), existingCount);
 
         if (mode == Actionable.MODULATE) {
             long newCount = existingCount - toExtract;
-            setStoredCount(request, newCount);
+            setStoredCount(request, key, newCount);
 
             if (newCount <= 0) storedTypes = Math.max(0, storedTypes - 1);
 
@@ -204,21 +233,14 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
 
     @Override
     public IItemList<IAEFluidStack> getAvailableItems(IItemList<IAEFluidStack> out) {
-        NBTTagCompound fluidsTag = tagCompound.getCompoundTag(NBT_FLUID_TYPE);
-
-        for (String key : fluidsTag.getKeySet()) {
-            NBTTagCompound fluidTag = fluidsTag.getCompoundTag(key);
-            FluidStack stack = FluidStack.loadFluidStackFromNBT(fluidTag);
-            if (stack == null) continue;
-
-            long count = fluidTag.getLong(NBT_STORED_COUNT);
+        for (Map.Entry<Integer, IAEFluidStack> entry : nbtIndexToFluidStack.entrySet()) {
+            long count = nbtIndexToCount.getOrDefault(entry.getKey(), 0L);
             if (count <= 0) continue;
 
-            IAEFluidStack aeStack = channel.createStack(stack);
-            if (aeStack != null) {
-                aeStack.setStackSize(count);
-                out.add(aeStack);
-            }
+            // Copy the cached prototype to avoid mutating it (callers may hold references)
+            IAEFluidStack aeStack = entry.getValue().copy();
+            aeStack.setStackSize(count);
+            out.add(aeStack);
         }
 
         return out;

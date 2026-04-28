@@ -3,17 +3,14 @@ package com.cells.integration.thaumicenergistics;
 import javax.annotation.Nullable;
 
 import net.minecraft.item.ItemStack;
-import net.minecraft.util.ResourceLocation;
-
-import thaumcraft.api.aspects.Aspect;
-
-import thaumicenergistics.api.EssentiaStack;
 
 import appeng.items.parts.PartModels;
 import appeng.parts.PartModel;
 
-import com.cells.Tags;
+import thaumicenergistics.api.EssentiaStack;
+
 import com.cells.parts.AbstractInterfacePart;
+import com.cells.parts.PartModelsHelper;
 
 
 /**
@@ -39,17 +36,16 @@ public class PartEssentiaImportInterface extends AbstractInterfacePart<EssentiaI
         implements IEssentiaInterfaceHost, EssentiaInterfaceLogic.Host {
 
     private static final String prefix = "part/import_interface/essentia/";
-
-    public static final ResourceLocation MODEL_BASE = new ResourceLocation(Tags.MODID, prefix + "base");
-
-    @PartModels
-    public static final PartModel MODELS_OFF = new PartModel(MODEL_BASE, new ResourceLocation(Tags.MODID, prefix + "off"));
+    private static final Object[] MODELS = PartModelsHelper.createInterfaceModels(prefix);
 
     @PartModels
-    public static final PartModel MODELS_ON = new PartModel(MODEL_BASE, new ResourceLocation(Tags.MODID, prefix + "on"));
+    public static final PartModel MODELS_OFF = (PartModel) MODELS[1];
 
     @PartModels
-    public static final PartModel MODELS_HAS_CHANNEL = new PartModel(MODEL_BASE, new ResourceLocation(Tags.MODID, prefix + "has_channel"));
+    public static final PartModel MODELS_ON = (PartModel) MODELS[2];
+
+    @PartModels
+    public static final PartModel MODELS_HAS_CHANNEL = (PartModel) MODELS[3];
 
     public PartEssentiaImportInterface(final ItemStack is) {
         super(is);
@@ -69,11 +65,6 @@ public class PartEssentiaImportInterface extends AbstractInterfacePart<EssentiaI
     @Override
     protected PartModel getModelHasChannel() {
         return MODELS_HAS_CHANNEL;
-    }
-
-    @Override
-    protected String getMemoryCardName() {
-        return "tile.cells.import_interface.essentia";
     }
 
     @Override
@@ -99,35 +90,4 @@ public class PartEssentiaImportInterface extends AbstractInterfacePart<EssentiaI
         this.logic.setEssentiaInSlot(slot, essentia);
     }
 
-    @Override
-    public int insertEssentiaIntoSlot(int slot, EssentiaStack essentia) {
-        return this.logic.insertEssentiaIntoSlot(slot, essentia);
-    }
-
-    @Override
-    public boolean doesContainerAccept(Aspect aspect) {
-        return this.logic.doesContainerAccept(aspect);
-    }
-
-    @Override
-    public boolean doesContainerContainAmount(Aspect aspect, int amount) {
-        return this.logic.doesContainerContainAmount(aspect, amount);
-    }
-
-    @Override
-    public int addToContainer(Aspect aspect, int amount) {
-        // Import interface accepts essentia from external sources (logic handles direction check)
-        return this.logic.addToContainer(aspect, amount);
-    }
-
-    @Override
-    public int takeEssentiaAmount(Aspect aspect, int amount) {
-        // Import interface does not provide essentia (logic handles direction check)
-        return this.logic.takeEssentiaAmount(aspect, amount);
-    }
-
-    @Override
-    public int getEssentiaCount(Aspect aspect) {
-        return this.logic.getEssentiaCount(aspect);
-    }
 }

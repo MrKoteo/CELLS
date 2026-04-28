@@ -8,6 +8,7 @@ import net.minecraft.client.resources.I18n;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.NonNullList;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
@@ -15,7 +16,6 @@ import net.minecraftforge.fml.relauncher.SideOnly;
 import appeng.api.config.Upgrades;
 import appeng.api.implementations.items.IUpgradeModule;
 
-import com.cells.ItemRegistry;
 import com.cells.Tags;
 import com.cells.core.CellsCreativeTab;
 
@@ -59,6 +59,23 @@ public class AbstractCustomUpgrade extends Item implements IUpgradeModule {
         this.tierNames = tierNames;
     }
 
+    public static void setIntKey(ItemStack stack, String key, int value, int min) {
+        NBTTagCompound tag = stack.getTagCompound();
+        if (tag == null) {
+            tag = new NBTTagCompound();
+            stack.setTagCompound(tag);
+        }
+
+        tag.setInteger(key, Math.max(min, value));
+    }
+
+    public static int getIntKey(ItemStack stack, String key, int defaultValue) {
+        NBTTagCompound tag = stack.getTagCompound();
+        if (tag == null || !tag.hasKey(key)) return defaultValue;
+
+        return tag.getInteger(key);
+    }
+
     /**
      * Helper method to add compatible types to the tooltip.
      *
@@ -99,8 +116,15 @@ public class AbstractCustomUpgrade extends Item implements IUpgradeModule {
     @Override
     @SideOnly(Side.CLIENT)
     public void getSubItems(@Nonnull CreativeTabs tab, @Nonnull NonNullList<ItemStack> items) {
-        if (tierValues.length == 0 || !isInCreativeTab(tab)) return;
+        if (!isInCreativeTab(tab)) return;
 
+        // Items with no tiers add a single stack
+        if (tierValues.length == 0) {
+            items.add(new ItemStack(this, 1, 0));
+            return;
+        }
+
+        // Items with tiers add one stack per tier
         for (int i = 0; i < tierValues.length; i++) items.add(new ItemStack(this, 1, i));
     }
 
@@ -117,18 +141,6 @@ public class AbstractCustomUpgrade extends Item implements IUpgradeModule {
         if (meta >= 0 && meta < tierValues.length) return tierValues[meta];
 
         return tierValues[0];
-    }
-
-    /**
-     * Creates a Decompression Tier Card for the given tier.
-     *
-     * @param tier 0=3x, 1=6x, 2=9x, 3=12x, 4=15x
-     * @return The card ItemStack
-     */
-    public ItemStack create(int tier) {
-        if (tier < 0 || tier >= tierNames.length) tier = 0;
-
-        return new ItemStack(ItemRegistry.DECOMPRESSION_TIER_CARD, 1, tier);
     }
 
     /**

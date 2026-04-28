@@ -85,16 +85,6 @@ public class TileEssentiaExportInterface extends AbstractInterfaceTile<EssentiaI
         return this.logic.addToContainer(aspect, amount);
     }
 
-    @Override
-    public int takeEssentiaAmount(Aspect aspect, int amount) {
-        return this.logic.takeEssentiaAmount(aspect, amount);
-    }
-
-    @Override
-    public int getEssentiaCount(Aspect aspect) {
-        return this.logic.getEssentiaCount(aspect);
-    }
-
     // ============================== IAspectSource / IAspectContainer Implementation ==============================
 
     /**
@@ -119,6 +109,7 @@ public class TileEssentiaExportInterface extends AbstractInterfaceTile<EssentiaI
     @Override
     public boolean doesContainerContain(AspectList aspects) {
         for (Aspect aspect : aspects.getAspects()) {
+            if (aspect == null) continue;
             if (!this.logic.containerContainsAny(aspect)) return false;
         }
         return true;
@@ -129,6 +120,7 @@ public class TileEssentiaExportInterface extends AbstractInterfaceTile<EssentiaI
         // Export interface: we are a source, tubes can pull from us
         // First check if we have all aspects
         for (Aspect aspect : aspects.getAspects()) {
+            if (aspect == null) continue;
             int needed = aspects.getAmount(aspect);
             if (!this.logic.doesContainerContainAmount(aspect, needed)) {
                 return false;
@@ -137,6 +129,7 @@ public class TileEssentiaExportInterface extends AbstractInterfaceTile<EssentiaI
 
         // Take all aspects
         for (Aspect aspect : aspects.getAspects()) {
+            if (aspect == null) continue;
             int needed = aspects.getAmount(aspect);
             this.logic.takeEssentiaAmount(aspect, needed);
         }

@@ -2,11 +2,10 @@ package com.cells.gui;
 
 import javax.annotation.Nullable;
 
-import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.I18n;
 import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.EnumFacing;
-import net.minecraft.util.text.TextComponentTranslation;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.fluids.FluidUtil;
 import net.minecraftforge.fml.common.Loader;
@@ -16,6 +15,8 @@ import mekanism.api.gas.GasStack;
 import mekanism.api.gas.IGasHandler;
 import mekanism.api.gas.IGasItem;
 import mekanism.common.capabilities.Capabilities;
+
+import com.cells.gui.overlay.MessageHelper;
 
 
 /**
@@ -28,20 +29,6 @@ import mekanism.common.capabilities.Capabilities;
 public class QuickAddHelper {
 
     private QuickAddHelper() {}
-
-    /**
-     * Result of a quick-add lookup containing the item and optional fluid.
-     */
-    public static class QuickAddResult {
-        public final ItemStack item;
-        @Nullable
-        public final FluidStack fluid;
-
-        public QuickAddResult(ItemStack item, @Nullable FluidStack fluid) {
-            this.item = item;
-            this.fluid = fluid;
-        }
-    }
 
     /**
      * Get the item stack under the mouse cursor.
@@ -84,30 +71,6 @@ public class QuickAddHelper {
     }
 
     /**
-     * Get a QuickAddResult containing both item and extracted fluid.
-     * Useful for fluid interfaces that need to validate fluid content.
-     *
-     * @param hoveredSlot The currently hovered inventory slot (or null)
-     * @return QuickAddResult with item and optional fluid
-     */
-    public static QuickAddResult getQuickAddResult(@Nullable Slot hoveredSlot) {
-        ItemStack item = ItemStack.EMPTY;
-        FluidStack fluid = null;
-
-        // Check hovered inventory slot first
-        if (hoveredSlot != null && hoveredSlot.getHasStack()) {
-            item = hoveredSlot.getStack().copy();
-            fluid = FluidUtil.getFluidContained(item);
-        } else if (Loader.isModLoaded("jei")) {
-            // Check JEI
-            item = getJeiItemIngredient();
-            fluid = getJeiFluidIngredient();
-        }
-
-        return new QuickAddResult(item, fluid);
-    }
-
-    /**
      * Check if there is anything under the cursor (slot or JEI).
      * Used to determine if quick-add should show an error for invalid content.
      *
@@ -127,34 +90,10 @@ public class QuickAddHelper {
     }
 
     /**
-     * Send a "no space" error message to the player.
-     */
-    public static void sendNoSpaceError() {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc.player != null) {
-            mc.player.sendMessage(new TextComponentTranslation("message.cells.no_filter_space"));
-        }
-    }
-
-    /**
      * Send a "no X" error message to the player (for non-item interfaces).
      */
     public static void sendNoValidError(String type) {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc.player != null) {
-            mc.player.sendMessage(new TextComponentTranslation("message.cells.not_valid_content",
-                new TextComponentTranslation("cells.type." + type)));
-        }
-    }
-
-    /**
-     * Send a "duplicate filter" error message to the player.
-     */
-    public static void sendDuplicateError() {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc.player != null) {
-            mc.player.sendMessage(new TextComponentTranslation("message.cells.filter_duplicate"));
-        }
+        MessageHelper.error("message.cells.not_valid_content", I18n.format("cells.type." + type));
     }
 
     // ==================== Gas extraction methods (MekanismEnergistics integration) ====================

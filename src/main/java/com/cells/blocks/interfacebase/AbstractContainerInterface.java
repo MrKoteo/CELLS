@@ -15,11 +15,11 @@ import net.minecraft.inventory.Slot;
 import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.text.TextComponentTranslation;
 import net.minecraft.world.World;
 
 import appeng.api.implementations.guiobjects.IGuiItem;
 import appeng.api.parts.IPart;
+import appeng.api.storage.data.IAEStack;
 import appeng.container.AEBaseContainer;
 import appeng.container.guisync.GuiSync;
 import appeng.container.slot.AppEngSlot;
@@ -31,10 +31,14 @@ import appeng.items.tools.ToolNetworkTool;
 import appeng.tile.inventory.AppEngInternalInventory;
 import appeng.util.Platform;
 
+import com.cells.gui.overlay.ServerMessageHelper;
 import com.cells.network.CellsNetworkHandler;
+import com.cells.network.packets.PacketSyncSlotSizeOverride;
 import com.cells.network.sync.IQuickAddFilterContainer;
 import com.cells.network.sync.IResourceSyncContainer;
+import com.cells.network.sync.IStorageSyncContainer;
 import com.cells.network.sync.PacketResourceSlot;
+import com.cells.network.sync.PacketStorageSync;
 import com.cells.network.sync.ResourceType;
 
 
@@ -51,12 +55,27 @@ import com.cells.network.sync.ResourceType;
  */
 public abstract class AbstractContainerInterface<T, K, H extends IFilterableInterfaceHost<T, K>>
     extends AEBaseContainer
-    implements IResourceSyncContainer, IQuickAddFilterContainer {
+    implements IResourceSyncContainer, IQuickAddFilterContainer, IStorageSyncContainer, ISizeOverrideContainer {
 
     protected final H host;
 
     /** Server-side cache for filter sync (tracks what was sent to clients). */
     protected final Map<Integer, T> serverFilterCache = new HashMap<>();
+
+    /**
+     * Server-side cache for storage sync (tracks what was sent to clients).
+     * Values are AE stacks containing both identity and amount. Null means slot was empty.
+     */
+    protected final Map<Integer, T> serverStorageCache = new HashMap<>();
+
+    /**
+     * Client-side per-slot size overrides (received via sync packets).
+     * Server-side this is used as a cache to detect changes.
+     */
+    protected final Map<Integer, Long> maxSlotSizeOverrides = new HashMap<>();
+
+    /** Server-side cache to track what was last sent to clients for maxSlotSizeOverrides. */
+    protected final Map<Integer, Long> serverSizeOverrideCache = new HashMap<>();
 
     // Network tool ("toolbox") support
     private int toolboxSlot;
@@ -90,13 +109,21 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
         );
         this.host = host;
         this.maxSlotSize = defaultMaxSlotSize;
+
+        // Initialize page state from host so the @GuiSync fields have the correct
+        // values on the very first SyncData tick (when clientVersion == null).
+        // Without this, the client briefly sees page 0 before detectAndSendChanges
+        // copies from the host. More critically, this ensures the initial sync
+        // packet carries the correct page when returning from sub-GUIs.
+        this.currentPage = host.getCurrentPage();
+        this.totalPages = host.getTotalPages();
+
         this.setupToolbox(anchor);
 
         // Add upgrade slots
-        for (int i = 0; i < AbstractResourceInterfaceLogic.UPGRADE_SLOTS; i++) {
-            this.addSlotToContainer(new SlotUpgrade<>(
-                this.host.getUpgradeInventory(), i, 186, 25 + i * 18, this.host
-            ));
+        AppEngInternalInventory upgradeInv = this.host.getUpgradeInventory();
+        for (int i = 0; i < upgradeInv.getSlots(); i++) {
+            this.addSlotToContainer(new SlotUpgrade(upgradeInv, i, 186, 25 + i * 18));
         }
 
         // Bind player inventory
@@ -243,8 +270,31 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
         return this.host;
     }
 
-    public void setMaxSlotSize(int size) {
+    public void setMaxSlotSize(long size) {
         this.host.setMaxSlotSize(size);
+    }
+
+    // ================================= Per-Slot Size Overrides (ISizeOverrideContainer) =================================
+
+    @Override
+    public void receiveMaxSlotSizeOverridesync(int slot, long size) {
+        if (size < 0) {
+            this.maxSlotSizeOverrides.remove(slot);
+        } else {
+            this.maxSlotSizeOverrides.put(slot, size);
+        }
+    }
+
+    @Override
+    public long getEffectiveMaxSlotSize(int slot) {
+        Long override = this.maxSlotSizeOverrides.get(slot);
+        return override != null ? override : this.maxSlotSize;
+    }
+
+    @Override
+    public long getSlotSizeOverride(int slot) {
+        Long override = this.maxSlotSizeOverrides.get(slot);
+        return override != null ? override : -1;
     }
 
     public void setPollingRate(int ticks) {
@@ -281,16 +331,19 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
 
     @Override
     public void detectAndSendChanges() {
-        super.detectAndSendChanges();
-
-        // Validate toolbox is still in expected slot
-        this.checkToolbox();
-
-        // Sync GuiSync values from host
+        // Copy host values into @GuiSync fields BEFORE super.detectAndSendChanges().
+        // AE2's SyncData sends the initial value on the first tick (when clientVersion == null),
+        // so the fields must already hold the correct host values by then. Otherwise the client
+        // sees the constructor default until the next tick detects the change.
         if (this.maxSlotSize != this.host.getMaxSlotSize()) this.maxSlotSize = this.host.getMaxSlotSize();
         if (this.pollingRate != this.host.getPollingRate()) this.pollingRate = this.host.getPollingRate();
         if (this.currentPage != this.host.getCurrentPage()) this.currentPage = this.host.getCurrentPage();
         if (this.totalPages != this.host.getTotalPages()) this.totalPages = this.host.getTotalPages();
+
+        super.detectAndSendChanges();
+
+        // Validate toolbox is still in expected slot
+        this.checkToolbox();
 
         // Server-side filter sync
         if (!Platform.isServer()) return;
@@ -316,6 +369,28 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
                 }
             }
         }
+
+        // Server-side storage sync: diff each slot's identity+amount against what was sent
+        for (int i = 0; i < filterSlots; i++) {
+            T current = this.host.getStorageStack(i);
+            T cached = this.serverStorageCache.get(i);
+
+            if (!storageEqual(current, cached)) {
+                this.serverStorageCache.put(i, copyFilter(current));
+
+                for (IContainerListener listener : this.listeners) {
+                    if (listener instanceof EntityPlayerMP) {
+                        CellsNetworkHandler.INSTANCE.sendTo(
+                            new PacketStorageSync(type, i, current),
+                            (EntityPlayerMP) listener
+                        );
+                    }
+                }
+            }
+        }
+
+        // Server-side per-slot size override sync
+        syncmaxSlotSizeOverrides();
     }
 
     @Override
@@ -327,18 +402,74 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
 
         final int filterSlots = AbstractResourceInterfaceLogic.FILTER_SLOTS;
         final ResourceType type = getResourceType();
-        Map<Integer, Object> fullMap = new HashMap<>();
+        Map<Integer, Object> fullFilterMap = new HashMap<>();
+        Map<Integer, Object> fullStorageMap = new HashMap<>();
 
         for (int i = 0; i < filterSlots; i++) {
             T filter = getFilter(i);
-            fullMap.put(i, filter);
+            fullFilterMap.put(i, filter);
             this.serverFilterCache.put(i, copyFilter(filter));
+
+            T storage = this.host.getStorageStack(i);
+            fullStorageMap.put(i, storage);
+            this.serverStorageCache.put(i, copyFilter(storage));
         }
 
-        CellsNetworkHandler.INSTANCE.sendTo(
-            new PacketResourceSlot(type, fullMap),
-            (EntityPlayerMP) listener
-        );
+        EntityPlayerMP mp = (EntityPlayerMP) listener;
+        CellsNetworkHandler.INSTANCE.sendTo(new PacketResourceSlot(type, fullFilterMap), mp);
+        CellsNetworkHandler.INSTANCE.sendTo(new PacketStorageSync(type, fullStorageMap), mp);
+
+        // Send full size overrides to new listener
+        Map<Integer, Long> hostOverrides = this.host.getInterfaceLogic().getmaxSlotSizeOverrides();
+        for (Map.Entry<Integer, Long> entry : hostOverrides.entrySet()) {
+            CellsNetworkHandler.INSTANCE.sendTo(
+                new PacketSyncSlotSizeOverride(entry.getKey(), entry.getValue()), mp
+            );
+            this.serverSizeOverrideCache.put(entry.getKey(), entry.getValue());
+        }
+    }
+
+    /**
+     * Sync per-slot size overrides from host to client.
+     * Compares against serverSizeOverrideCache and sends diffs.
+     */
+    private void syncmaxSlotSizeOverrides() {
+        Map<Integer, Long> hostOverrides = this.host.getInterfaceLogic().getmaxSlotSizeOverrides();
+
+        // Check for new or changed overrides
+        for (Map.Entry<Integer, Long> entry : hostOverrides.entrySet()) {
+            int slot = entry.getKey();
+            long size = entry.getValue();
+            Long cached = this.serverSizeOverrideCache.get(slot);
+
+            if (cached == null || cached != size) {
+                this.serverSizeOverrideCache.put(slot, size);
+                for (IContainerListener listener : this.listeners) {
+                    if (listener instanceof EntityPlayerMP) {
+                        CellsNetworkHandler.INSTANCE.sendTo(
+                            new PacketSyncSlotSizeOverride(slot, size),
+                            (EntityPlayerMP) listener
+                        );
+                    }
+                }
+            }
+        }
+
+        // Check for removed overrides (in cache but no longer in host)
+        this.serverSizeOverrideCache.entrySet().removeIf(entry -> {
+            if (!hostOverrides.containsKey(entry.getKey())) {
+                for (IContainerListener listener : this.listeners) {
+                    if (listener instanceof EntityPlayerMP) {
+                        CellsNetworkHandler.INSTANCE.sendTo(
+                            new PacketSyncSlotSizeOverride(entry.getKey(), -1),
+                            (EntityPlayerMP) listener
+                        );
+                    }
+                }
+                return true;
+            }
+            return false;
+        });
     }
 
     /**
@@ -366,6 +497,40 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
         }
 
         applyFilterUpdates(typedFilters, getPlayerFromListeners());
+    }
+
+    /**
+     * Receive storage slot updates from server.
+     * Implements {@link IStorageSyncContainer}.
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public void receiveStorageSlots(ResourceType type, Map<Integer, Object> resources) {
+        if (type != getResourceType()) return;
+
+        // Storage sync is server→client only
+        if (this.host.getHostWorld() == null || !this.host.getHostWorld().isRemote) return;
+
+        for (Map.Entry<Integer, Object> entry : resources.entrySet()) {
+            this.host.setStorageForClientSync(entry.getKey(), (T) entry.getValue());
+        }
+    }
+
+    // ================================= Storage Comparison =================================
+
+    /**
+     * Compare two storage stacks for equality (identity + amount).
+     * Uses {@link #filtersEqual} for identity comparison, plus amount check.
+     * All T types are IAEStack instances, so we can extract amount via raw cast.
+     */
+    @SuppressWarnings("rawtypes")
+    private boolean storageEqual(@Nullable T a, @Nullable T b) {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        if (!filtersEqual(a, b)) return false;
+
+        // All concrete T types extend IAEStack, compare amounts
+        return ((IAEStack) a).getStackSize() == ((IAEStack) b).getStackSize();
     }
 
     /**
@@ -432,19 +597,18 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
     public boolean addToFilter(@Nonnull T stack, @Nullable EntityPlayer player) {
         K key = createKey(stack);
         if (key == null) {
-            if (player != null) {
-                player.sendMessage(new TextComponentTranslation(
-                    "message.cells.not_valid_content",
-                    new TextComponentTranslation(this.host.getTypeLocalizationKey())
-                ));
+            if (player instanceof EntityPlayerMP) {
+                ServerMessageHelper.error(
+                    (EntityPlayerMP) player, "message.cells.not_valid_content",
+                    this.host.getTypeLocalizationKey());
             }
             return false;
         }
 
         // Check for duplicates using O(1) lookup
         if (isInFilter(key)) {
-            if (player != null) {
-                player.sendMessage(new TextComponentTranslation("message.cells.filter_duplicate"));
+            if (player instanceof EntityPlayerMP) {
+                ServerMessageHelper.warning((EntityPlayerMP) player, "message.cells.filter_duplicate");
             }
             return false;
         }
@@ -452,8 +616,8 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
         // Find first available slot
         int slot = findFirstAvailableSlot();
         if (slot < 0) {
-            if (player != null) {
-                player.sendMessage(new TextComponentTranslation("message.cells.no_filter_space"));
+            if (player instanceof EntityPlayerMP) {
+                ServerMessageHelper.error((EntityPlayerMP) player, "message.cells.no_filter_space");
             }
             return false;
         }
@@ -486,8 +650,8 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
             if (stack == null) {
                 // Import: only clear if storage is empty (prevent orphans)
                 if (!isExport && !isStorageEmpty(slot)) {
-                    if (player != null) {
-                        player.sendMessage(new TextComponentTranslation("message.cells.storage_not_empty"));
+                    if (player instanceof EntityPlayerMP) {
+                        ServerMessageHelper.warning((EntityPlayerMP) player, "message.cells.storage_not_empty");
                     }
                     continue;
                 }
@@ -498,8 +662,8 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
 
             // Import: prevent filter changes if storage has content
             if (!isExport && !isStorageEmpty(slot)) {
-                if (player != null) {
-                    player.sendMessage(new TextComponentTranslation("message.cells.storage_not_empty"));
+                if (player instanceof EntityPlayerMP) {
+                    ServerMessageHelper.warning((EntityPlayerMP) player, "message.cells.storage_not_empty");
                 }
                 continue;
             }
@@ -524,8 +688,8 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
             }
 
             if (isDuplicate) {
-                if (player != null) {
-                    player.sendMessage(new TextComponentTranslation("message.cells.filter_duplicate"));
+                if (player instanceof EntityPlayerMP) {
+                    ServerMessageHelper.warning((EntityPlayerMP) player, "message.cells.filter_duplicate");
                 }
             } else {
                 setFilter(slot, stack);
@@ -587,31 +751,37 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
         // === Shift-clicking from player inventory ===
 
         // Priority 1: Try to insert into upgrade slots if item is a valid upgrade
-        if (this.host.isValidUpgrade(clickedStack)) {
-            boolean insertedAny = false;
+        AppEngInternalInventory upgradeInv = this.host.getUpgradeInventory();
+        boolean insertedAny = false;
 
-            // Insert as many as possible into empty upgrade slots
-            // Iterate by slot type (SlotUpgrade), not by index, to avoid toolbox slots
-            for (Slot containerSlot : this.inventorySlots) {
-                if (clickedStack.isEmpty()) break;
-                if (!(containerSlot instanceof SlotUpgrade)) continue;
-                if (containerSlot.getHasStack()) continue;
-                if (!containerSlot.isItemValid(clickedStack)) continue;
+        // Insert as many as possible into empty upgrade slots
+        for (int i = 0; i < upgradeInv.getSlots(); i++) {
+            // Gate shift-click through the same isItemValid check that direct clicks use;
+            // Forge's insertItem does NOT call isItemValid, so we must check manually.
+            if (!upgradeInv.isItemValid(i, clickedStack)) continue;
 
-                // Found empty upgrade slot - insert one item
-                ItemStack toInsert = clickedStack.splitStack(1);
-                containerSlot.putStack(toInsert);
-                containerSlot.onSlotChanged();
+            int previousCount = clickedStack.getCount();
+            // Pass a copy to avoid shared-reference corruption: Forge's ItemStackHandler
+            // stores the input directly (no copy) when the slot is empty and the full
+            // stack fits, so mutating clickedStack would also zero the upgrade slot.
+            ItemStack remainder = upgradeInv.insertItem(i, clickedStack.copy(), false);
+            if (remainder.getCount() < previousCount) {
+                clickedStack.setCount(remainder.getCount());
                 insertedAny = true;
-            }
 
-            if (insertedAny) {
-                if (clickedStack.isEmpty()) slot.putStack(ItemStack.EMPTY);
-                slot.onSlotChanged();
-                this.detectAndSendChanges();
+                if (clickedStack.isEmpty()) break;
             }
+        }
 
-            // Don't try filter extraction for upgrade items
+        if (insertedAny) {
+            if (clickedStack.isEmpty()) slot.putStack(ItemStack.EMPTY);
+            slot.onSlotChanged();
+            this.detectAndSendChanges();
+
+            // Return EMPTY to stop the vanilla loop from re-invoking this method.
+            // Without this, the loop sees remaining items and calls again, but now
+            // the upgrade slots are full so the leftover falls through to the
+            // filter path, placing upgrade cards as filters.
             return ItemStack.EMPTY;
         }
 
@@ -779,18 +949,10 @@ public abstract class AbstractContainerInterface<T, K, H extends IFilterableInte
     /**
      * Common upgrade slot implementation.
      */
-    protected static class SlotUpgrade<H extends IInterfaceHost> extends SlotNormal {
-        private final H host;
-
-        public SlotUpgrade(AppEngInternalInventory inv, int idx, int x, int y, H host) {
+    protected static class SlotUpgrade extends SlotNormal {
+        public SlotUpgrade(AppEngInternalInventory inv, int idx, int x, int y) {
             super(inv, idx, x, y);
-            this.host = host;
             this.setIIcon(13 * 16 + 15); // UPGRADES icon
-        }
-
-        @Override
-        public boolean isItemValid(@Nonnull ItemStack stack) {
-            return host.isValidUpgrade(stack);
         }
 
         @Override

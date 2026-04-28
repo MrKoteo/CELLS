@@ -66,6 +66,9 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
     // In-memory cache: ItemStackKey -> NBT index for O(1) lookups
     // Built on load, updated on insert/remove. Avoids string key generation per operation.
     private final Map<ItemStackKey, Integer> keyToNbtIndex = new HashMap<>();
+    private final Map<Integer, IAEItemStack> nbtIndexToItemStack = new HashMap<>();
+    // Cached counts by NBT index, avoids NBT reads in getAvailableItems and getStoredCount
+    private final Map<Integer, Long> nbtIndexToCount = new HashMap<>();
 
     // Next available NBT index for new items (computed on load, updated on insert)
     private int cachedNextIndex = 0;
@@ -82,6 +85,15 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
     private final Map<ItemStackKey, Integer> itemNbtSizes = new HashMap<>();
     private int totalNbtSize = 0;
 
+    // Cached immutable capacity components, computed once at construction to avoid
+    // repeated virtual dispatch through cellType/channel on every inject/extract call.
+    private final long cachedDisplayBytes;
+    private final long cachedMultiplier;
+    private final int cachedUnitsPerByte;
+    private final long cachedDisplayBytesPerType;
+    private final long cachedPerTypeCapacity;
+    private final int cachedEffectiveMaxTypes;
+
     public HyperDensityCellInventory(IItemHyperDensityCell cellType, ItemStack cellStack, ISaveProvider container) {
         this.cellStack = cellStack;
         this.container = container;
@@ -94,6 +106,28 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
         IItemHandler upgrades = cellType.getUpgradesInventory(cellStack);
         equalDistributionLimit = CellUpgradeHelper.getEqualDistributionLimit(upgrades);
         cachedHasOverflowCard = CellUpgradeHelper.hasOverflowCard(upgrades);
+
+        // Cache immutable capacity components, these depend only on cell type, cell stack,
+        // and upgrade cards, all of which are fixed for the lifetime of this inventory.
+        this.cachedDisplayBytes = cellType.getDisplayBytes(cellStack);
+        this.cachedMultiplier = cellType.getByteMultiplier();
+        this.cachedUnitsPerByte = channel.getUnitsPerByte();
+
+        long bytesPerType = cellType.getBytesPerType(cellStack);
+        this.cachedDisplayBytesPerType = (cachedMultiplier <= 0) ? bytesPerType : bytesPerType / cachedMultiplier;
+
+        int maxTypes = cellType.getMaxTypes();
+        this.cachedEffectiveMaxTypes = (equalDistributionLimit > 0) ? Math.min(equalDistributionLimit, maxTypes) : maxTypes;
+
+        if (equalDistributionLimit <= 0) {
+            this.cachedPerTypeCapacity = Long.MAX_VALUE;
+        } else {
+            int n = equalDistributionLimit;
+            long typeBytesDisplay = (long) n * cachedDisplayBytesPerType;
+            long availableDisplayBytes = cachedDisplayBytes - typeBytesDisplay;
+            this.cachedPerTypeCapacity = (availableDisplayBytes <= 0) ? 0
+                : CellMathHelper.multiplyThenDivide(availableDisplayBytes, cachedUnitsPerByte, cachedMultiplier, n);
+        }
     }
 
     /**
@@ -101,11 +135,7 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
      * If Equal Distribution is active, returns that limit; otherwise MAX_TYPES.
      */
     private int getEffectiveMaxTypes() {
-        int maxTypes = cellType.getMaxTypes();
-
-        if (equalDistributionLimit > 0) return Math.min(equalDistributionLimit, maxTypes);
-
-        return maxTypes;
+        return cachedEffectiveMaxTypes;
     }
 
     /**
@@ -121,22 +151,7 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
      * division that handles the case where the numerator would overflow.
      */
     private long getPerTypeCapacity() {
-        if (equalDistributionLimit <= 0) return Long.MAX_VALUE;
-
-        int n = equalDistributionLimit;
-        long displayBytes = cellType.getDisplayBytes(cellStack);
-        long multiplier = cellType.getByteMultiplier();
-        int itemsPerByte = channel.getUnitsPerByte();
-
-        // Calculate overhead for ALL N types (not just currently stored ones)
-        long typeBytesDisplay = (long) n * getDisplayBytesPerType();
-        long availableDisplayBytes = displayBytes - typeBytesDisplay;
-
-        if (availableDisplayBytes <= 0) return 0;
-
-        // Use overflow-safe division: (a * b * c) / n
-        // We want to divide by n while preserving as much precision as possible
-        return CellMathHelper.multiplyThenDivide(availableDisplayBytes, itemsPerByte, multiplier, n);
+        return cachedPerTypeCapacity;
     }
 
     private void loadFromNBT() {
@@ -145,6 +160,8 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
         storedItemCount = 0;
         storedTypes = 0;
         keyToNbtIndex.clear();
+        nbtIndexToItemStack.clear();
+        nbtIndexToCount.clear();
         itemNbtSizes.clear();
         totalNbtSize = 0;
         cachedNextIndex = 0;
@@ -190,6 +207,8 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
                     }
 
                     keyToNbtIndex.put(key, index);
+                    nbtIndexToItemStack.put(index, channel.createStack(stack));
+                    nbtIndexToCount.put(index, count);
                     storedItemCount = CellMathHelper.addWithOverflowProtection(storedItemCount, count);
                     storedTypes++;
 
@@ -221,10 +240,6 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
         }
 
         return true;
-    }
-
-    private long loadLongFromTag(NBTTagCompound tag) {
-        return tag.getLong(NBT_STORED_COUNT);
     }
 
     private void saveLongToTag(NBTTagCompound tag, long value) {
@@ -287,28 +302,20 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
     private long getTotalItemCapacityForTypes(int typeCount) {
         // When Equal Distribution is active, derive total from per-type to ensure consistency
         if (equalDistributionLimit > 0) {
-            long perType = getPerTypeCapacity();
-            return CellMathHelper.multiplyWithOverflowProtection(perType, equalDistributionLimit);
+            return CellMathHelper.multiplyWithOverflowProtection(cachedPerTypeCapacity, equalDistributionLimit);
         }
 
-        long displayBytes = cellType.getDisplayBytes(cellStack);
-        long multiplier = cellType.getByteMultiplier();
-        int itemsPerByte = channel.getUnitsPerByte();
-
         // Calculate type overhead in display bytes, then multiply
-        long typeBytesDisplay = (long) typeCount * getDisplayBytesPerType();
-        long availableDisplayBytes = displayBytes - typeBytesDisplay;
+        long typeBytesDisplay = (long) typeCount * cachedDisplayBytesPerType;
+        long availableDisplayBytes = cachedDisplayBytes - typeBytesDisplay;
 
         if (availableDisplayBytes <= 0) return 0;
 
-        // availableDisplayBytes * multiplier * itemsPerByte
-        // Do this carefully to avoid overflow
-        // First: availableDisplayBytes * itemsPerByte (usually safe)
-        long itemsAtDisplayScale = CellMathHelper.multiplyWithOverflowProtection(availableDisplayBytes, itemsPerByte);
+        // availableDisplayBytes * unitsPerByte * multiplier, carefully to avoid overflow
+        long itemsAtDisplayScale = CellMathHelper.multiplyWithOverflowProtection(availableDisplayBytes, cachedUnitsPerByte);
         if (itemsAtDisplayScale == Long.MAX_VALUE) return Long.MAX_VALUE;
 
-        // Then multiply by the byte multiplier
-        return CellMathHelper.multiplyWithOverflowProtection(itemsAtDisplayScale, multiplier);
+        return CellMathHelper.multiplyWithOverflowProtection(itemsAtDisplayScale, cachedMultiplier);
     }
 
     /**
@@ -316,38 +323,30 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
      * Calculates from cell type's multiplied value to avoid hardcoding.
      */
     private long getDisplayBytesPerType() {
-        long multipliedBytesPerType = cellType.getBytesPerType(cellStack);
-        long multiplier = cellType.getByteMultiplier();
-
-        if (multiplier <= 0) return multipliedBytesPerType;
-
-        return multipliedBytesPerType / multiplier;
+        return cachedDisplayBytesPerType;
     }
 
     /**
-     * Get the stored item data for a specific item from NBT.
-     * Uses ItemStackKey cache for O(1) lookup.
+     * Get the stored item count using a pre-computed key.
+     * Avoids creating a new ItemStackKey (which deep-copies NBT) on every call.
      */
-    private long getStoredCount(IAEItemStack item) {
-        ItemStackKey key = ItemStackKey.of(item.getDefinition());
-        if (key == null) return 0;
-
+    private long getStoredCount(ItemStackKey key) {
         Integer index = keyToNbtIndex.get(key);
         if (index == null) return 0;
 
-        NBTTagCompound itemsTag = tagCompound.getCompoundTag(NBT_ITEM_TYPE);
-        return loadLongFromTag(itemsTag.getCompoundTag(String.valueOf(index)));
+        return nbtIndexToCount.getOrDefault(index, 0L);
     }
 
     /**
-     * Set the stored count for a specific item in NBT.
+     * Set the stored count for a specific item in NBT using a pre-computed key.
      * Only serializes the full item on first insert; subsequent updates only change the count.
      * Also tracks NBT size for tooltip display.
+     *
+     * @param item  The AE item stack (needed for serialization of new items)
+     * @param key   Pre-computed ItemStackKey to avoid duplicate NBT deep-copy
+     * @param count The new count to set
      */
-    private void setStoredCount(IAEItemStack item, long count) {
-        ItemStackKey key = ItemStackKey.of(item.getDefinition());
-        if (key == null) return;
-
+    private void setStoredCount(IAEItemStack item, ItemStackKey key, long count) {
         NBTTagCompound itemsTag = tagCompound.getCompoundTag(NBT_ITEM_TYPE);
         Integer index = keyToNbtIndex.get(key);
 
@@ -360,12 +359,15 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
 
                 itemsTag.removeTag(String.valueOf(index));
                 keyToNbtIndex.remove(key);
+                nbtIndexToItemStack.remove(index);
+                nbtIndexToCount.remove(index);
             }
         } else if (index != null) {
             // Item already exists - just update the count (no re-serialization needed)
             // NBT size change is minimal (just the count value), don't recalculate
             NBTTagCompound itemTag = itemsTag.getCompoundTag(String.valueOf(index));
             saveLongToTag(itemTag, count);
+            nbtIndexToCount.put(index, count);
         } else {
             // New item - serialize fully and assign a new sequential index
             index = cachedNextIndex++;
@@ -375,6 +377,8 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
             item.getDefinition().writeToNBT(itemTag);
             saveLongToTag(itemTag, count);
             itemsTag.setTag(nbtKey, itemTag);
+            nbtIndexToItemStack.put(index, item.copy());
+            nbtIndexToCount.put(index, count);
 
             keyToNbtIndex.put(key, index);
 
@@ -384,9 +388,12 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
                 itemNbtSizes.put(key, itemSize);
                 totalNbtSize += itemSize;
             }
-        }
 
-        tagCompound.setTag(NBT_ITEM_TYPE, itemsTag);
+            // Only set the parent tag reference when adding a new item, the compound may
+            // not be in the parent yet (first item ever). For updates/removals, the compound
+            // is already referenced from the parent and modifications are reflected automatically.
+            tagCompound.setTag(NBT_ITEM_TYPE, itemsTag);
+        }
     }
 
     /**
@@ -415,7 +422,11 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
         // Blacklisted items are always rejected
         if (!canAcceptItem(input)) return input;
 
-        long existingCount = getStoredCount(input);
+        // Compute key once to avoid duplicate NBT deep-copy in getStoredCount + setStoredCount
+        ItemStackKey key = ItemStackKey.of(input.getDefinition());
+        if (key == null) return input;
+
+        long existingCount = getStoredCount(key);
         boolean isNewType = existingCount == 0;
 
         // Check if we can add a new type (respecting Equal Distribution limit)
@@ -456,7 +467,7 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
         if (mode == Actionable.MODULATE) {
             if (isNewType) storedTypes++;
 
-            setStoredCount(input, CellMathHelper.addWithOverflowProtection(existingCount, toInsert));
+            setStoredCount(input, key, CellMathHelper.addWithOverflowProtection(existingCount, toInsert));
             storedItemCount = CellMathHelper.addWithOverflowProtection(storedItemCount, toInsert);
             saveChangesDeferred();
         }
@@ -477,14 +488,18 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
     public IAEItemStack extractItems(IAEItemStack request, Actionable mode, IActionSource src) {
         if (request == null || request.getStackSize() <= 0) return null;
 
-        long existingCount = getStoredCount(request);
+        // Compute key once to avoid duplicate NBT deep-copy in getStoredCount + setStoredCount
+        ItemStackKey key = ItemStackKey.of(request.getDefinition());
+        if (key == null) return null;
+
+        long existingCount = getStoredCount(key);
         if (existingCount <= 0) return null;
 
         long toExtract = Math.min(request.getStackSize(), existingCount);
 
         if (mode == Actionable.MODULATE) {
             long newCount = existingCount - toExtract;
-            setStoredCount(request, newCount);
+            setStoredCount(request, key, newCount);
 
             if (newCount <= 0) storedTypes = Math.max(0, storedTypes - 1);
 
@@ -500,21 +515,14 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
 
     @Override
     public IItemList<IAEItemStack> getAvailableItems(IItemList<IAEItemStack> out) {
-        NBTTagCompound itemsTag = tagCompound.getCompoundTag(NBT_ITEM_TYPE);
-
-        for (String key : itemsTag.getKeySet()) {
-            NBTTagCompound itemTag = itemsTag.getCompoundTag(key);
-            ItemStack stack = new ItemStack(itemTag);
-            if (stack.isEmpty()) continue;
-
-            long count = loadLongFromTag(itemTag);
+        for (Map.Entry<Integer, IAEItemStack> entry : nbtIndexToItemStack.entrySet()) {
+            long count = nbtIndexToCount.getOrDefault(entry.getKey(), 0L);
             if (count <= 0) continue;
 
-            IAEItemStack aeStack = channel.createStack(stack);
-            if (aeStack != null) {
-                aeStack.setStackSize(count);
-                out.add(aeStack);
-            }
+            // Copy the cached prototype to avoid mutating it, callers may hold references
+            IAEItemStack aeStack = entry.getValue().copy();
+            aeStack.setStackSize(count);
+            out.add(aeStack);
         }
 
         return out;
@@ -642,9 +650,7 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
         }
 
         // Normal case: capacity fits in long, calculate directly
-        int itemsPerByte = channel.getUnitsPerByte();
-        long multiplier = cellType.getByteMultiplier();
-        long itemsPerDisplayByte = CellMathHelper.multiplyWithOverflowProtection(itemsPerByte, multiplier);
+        long itemsPerDisplayByte = CellMathHelper.multiplyWithOverflowProtection(cachedUnitsPerByte, cachedMultiplier);
         if (itemsPerDisplayByte == 0) itemsPerDisplayByte = 1;
 
         // Overflow-safe ceiling division for items
@@ -663,9 +669,7 @@ public class HyperDensityCellInventory implements ICellInventory<IAEItemStack>, 
     public int getUnusedItemCount() {
         // Fractional items that don't fill a byte (in display scale)
         // This represents how many more items can fit before consuming another display byte
-        int itemsPerByte = channel.getUnitsPerByte();
-        long multiplier = cellType.getByteMultiplier();
-        long itemsPerDisplayByte = CellMathHelper.multiplyWithOverflowProtection(itemsPerByte, multiplier);
+        long itemsPerDisplayByte = CellMathHelper.multiplyWithOverflowProtection(cachedUnitsPerByte, cachedMultiplier);
 
         if (itemsPerDisplayByte == 0) return 0;
 

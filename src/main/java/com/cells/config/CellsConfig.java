@@ -1,6 +1,11 @@
 package com.cells.config;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 import net.minecraftforge.common.config.Configuration;
 import net.minecraftforge.common.config.Property;
@@ -30,6 +35,19 @@ public class CellsConfig {
     public static final String CATEGORY_CELLS = "cells";
     public static final String CATEGORY_IDLE_DRAIN = "idle_drain";
     public static final String CATEGORY_ENABLED = "enabled_cells";
+    public static final String CATEGORY_INTERFACES = "interfaces";
+
+    public static final String CATEGORY_HIDDEN = "hidden";
+
+    static public final List<String> hiddenCategories = Arrays.asList(
+        CATEGORY_HIDDEN
+    );
+
+    // Default blacklist entries for essentia containers that should be ignored by the Essentia Interface
+    // Mithminite Jar is blacklisted by default because it crashes if overfilled more than 250 (bug with the jar)
+    static private final String[] defaultEssentiaContainerBlacklist = new String[] {
+        "thaumadditions:jar_mithminite"
+    };
 
     private static Configuration config;
 
@@ -102,6 +120,49 @@ public class CellsConfig {
     /** Enable NBT size computation and display in cell tooltips */
     public static boolean enableNbtSizeTooltip = true;
 
+    /** Maximum slot size limit for interfaces (caps user-configurable max slot size) */
+    public static long interfaceMaxSlotSizeLimit = Long.MAX_VALUE;
+
+    /** Minimum polling rate for interfaces (0 = allow adaptive) */
+    public static int interfaceMinPollingRate = 0;
+
+    /** Use fixed (non-animated) textures for interface blocks and parts. Requires restart. */
+    public static boolean useFixedInterfaceTextures = true;
+
+    /** Whether the controls help panel is visible in Interface GUIs. Persisted as a hidden config. */
+    public static boolean showControlsHelp = true;
+
+    /** Number of upgrade slots for the Subnet Proxy (1-24) */
+    public static int subnetProxyUpgradeSlots = 5;
+
+    /** Minimum tick rate for the Subnet Proxy (ticks between updates) */
+    public static int subnetProxyMinTickRate = 5;
+
+    /** Maximum tick rate for the Subnet Proxy (ticks between updates when idle) */
+    public static int subnetProxyMaxTickRate = 60;
+
+    /** Essentia Creative Cell fix */
+    public static boolean enableEssentiaCreativeCellFix = true;
+
+    /**
+     * Set of tile entity registry IDs (e.g. "thaumcraft:thaumatorium") that the
+     * Essentia Interface should treat as non-interactable. Blacklisted TEs will
+     * not be detected as adjacent essentia containers, preventing both push and
+     * pull operations.
+     */
+    private static Set<String> essentiaContainerBlacklist = Collections.emptySet();
+
+    /**
+     * Check whether a tile entity registry ID is blacklisted from essentia
+     * interface interaction.
+     *
+     * @param registryId The tile entity registry ID (e.g. "thaumcraft:thaumatorium")
+     * @return true if the tile entity should be ignored by the essentia interface
+     */
+    public static boolean isEssentiaContainerBlacklisted(String registryId) {
+        return essentiaContainerBlacklist.contains(registryId);
+    }
+
     /**
      * Initializes the configuration from the given file.
      *
@@ -129,12 +190,22 @@ public class CellsConfig {
     public static void loadConfig() {
         // Category language keys
         config.getCategory(CATEGORY_GENERAL).setLanguageKey(Tags.MODID + ".config.category.general");
+        config.getCategory(CATEGORY_CELLS).setLanguageKey(Tags.MODID + ".config.category.cells");
         config.getCategory(CATEGORY_IDLE_DRAIN).setLanguageKey(Tags.MODID + ".config.category.idle_drain");
         config.getCategory(CATEGORY_ENABLED).setLanguageKey(Tags.MODID + ".config.category.enabled_cells");
+        config.getCategory(CATEGORY_INTERFACES).setLanguageKey(Tags.MODID + ".config.category.interfaces");
+
+        config.addCustomCategoryComment(CATEGORY_GENERAL, "General settings for cell behavior");
+        config.addCustomCategoryComment(CATEGORY_CELLS, "Misc settings for cells.");
+        config.addCustomCategoryComment(CATEGORY_IDLE_DRAIN,
+            "Idle power drain settings (AE power per tick). Higher values = more power consumption.");
+        config.addCustomCategoryComment(CATEGORY_ENABLED,
+            "Enable or disable specific cell types. Disabled cells will not be registered.");
+        config.addCustomCategoryComment(CATEGORY_INTERFACES,
+            "Settings for resource interfaces (Fluid, Gas, Essentia, Item import/export interfaces).");
+
 
         // General category
-        config.addCustomCategoryComment(CATEGORY_GENERAL, "General settings for cell behavior");
-
         Property p = config.get(CATEGORY_GENERAL,
             "hdItemMaxTypes", 63,
             "Maximum item types for hyper-density item storage cells (1-16384)", 1, 16384
@@ -148,84 +219,6 @@ public class CellsConfig {
         );
         p.setLanguageKey(Tags.MODID + ".config.hdFluidMaxTypes");
         hdFluidMaxTypes = p.getInt();
-
-        // Idle drain category
-        config.addCustomCategoryComment(CATEGORY_IDLE_DRAIN,
-            "Idle power drain settings (AE power per tick). Higher values = more power consumption.");
-
-        p = config.get(CATEGORY_IDLE_DRAIN,
-            "compactingIdleDrain", 6.0D,
-            "Idle drain for compacting cells", 0.0D, 100.0D
-        );
-        p.setLanguageKey(Tags.MODID + ".config.compactingIdleDrain");
-        compactingIdleDrain = p.getDouble();
-
-        p = config.get(CATEGORY_IDLE_DRAIN,
-            "hdIdleDrain", 10.0D,
-            "Idle drain for hyper-density cells", 0.0D, 100.0D
-        );
-        p.setLanguageKey(Tags.MODID + ".config.hdIdleDrain");
-        hdIdleDrain = p.getDouble();
-
-        p = config.get(CATEGORY_IDLE_DRAIN,
-            "hdCompactingIdleDrain", 20.0D,
-            "Idle drain for hyper-density compacting cells", 0.0D, 100.0D
-        );
-        p.setLanguageKey(Tags.MODID + ".config.hdCompactingIdleDrain");
-        hdCompactingIdleDrain = p.getDouble();
-
-        p = config.get(CATEGORY_IDLE_DRAIN,
-            "fluidHdIdleDrain", 10.0D,
-            "Idle drain for fluid hyper-density cells", 0.0D, 100.0D
-        );
-        p.setLanguageKey(Tags.MODID + ".config.fluidHdIdleDrain");
-        fluidHdIdleDrain = p.getDouble();
-
-        p = config.get(CATEGORY_IDLE_DRAIN,
-            "configurableCellIdleDrain", 3.0D,
-            "Idle drain for configurable cells", 0.0D, 100.0D
-        );
-        p.setLanguageKey(Tags.MODID + ".config.configurableCellIdleDrain");
-        configurableCellIdleDrain = p.getDouble();
-
-        // Enabled cells category
-        config.addCustomCategoryComment(CATEGORY_ENABLED,
-            "Enable or disable specific cell types. Disabled cells will not be registered.");
-
-        p = config.get(CATEGORY_ENABLED,
-            "enableCompactingCells", true,
-            "Enable compacting storage cells"
-        );
-        p.setLanguageKey(Tags.MODID + ".config.enableCompactingCells");
-        enableCompactingCells = p.getBoolean();
-
-        p = config.get(CATEGORY_ENABLED,
-            "enableHDCells", true,
-            "Enable hyper-density storage cells"
-        );
-        p.setLanguageKey(Tags.MODID + ".config.enableHDCells");
-        enableHDCells = p.getBoolean();
-
-        p = config.get(CATEGORY_ENABLED,
-            "enableHDCompactingCells", true,
-            "Enable hyper-density compacting storage cells"
-        );
-        p.setLanguageKey(Tags.MODID + ".config.enableHDCompactingCells");
-        enableHDCompactingCells = p.getBoolean();
-
-        p = config.get(CATEGORY_ENABLED,
-            "enableFluidHDCells", true,
-            "Enable fluid hyper-density storage cells"
-        );
-        p.setLanguageKey(Tags.MODID + ".config.enableFluidHDCells");
-        enableFluidHDCells = p.getBoolean();
-
-        p = config.get(CATEGORY_ENABLED,
-            "enableConfigurableCells", true,
-            "Enable configurable storage cells"
-        );
-        p.setLanguageKey(Tags.MODID + ".config.enableConfigurableCells");
-        enableConfigurableCells = p.getBoolean();
 
         // General: configurable cell max types per channel
         p = config.get(CATEGORY_GENERAL,
@@ -311,8 +304,179 @@ public class CellsConfig {
         p.setLanguageKey(Tags.MODID + ".config.enableNbtSizeTooltip");
         enableNbtSizeTooltip = p.getBoolean();
 
+        // Cells category
+        p = config.get(CATEGORY_CELLS,
+            "enableEssentiaCreativeCellFix", true,
+            "Enable the fix for the Essentia Creative Cell that makes it report only Max Int instead of Max Long / 2. This prevents deltas from overflowing and not reporting the right amounts. Disable this config if Thaumic Energistics support long in your version."
+        );
+        p.setLanguageKey(Tags.MODID + ".config.enableEssentiaCreativeCellFix");
+        enableEssentiaCreativeCellFix = p.getBoolean();
+
+        // Idle drain category
+        p = config.get(CATEGORY_IDLE_DRAIN,
+            "compactingIdleDrain", 6.0D,
+            "Idle drain for compacting cells", 0.0D, 100.0D
+        );
+        p.setLanguageKey(Tags.MODID + ".config.compactingIdleDrain");
+        compactingIdleDrain = p.getDouble();
+
+        p = config.get(CATEGORY_IDLE_DRAIN,
+            "hdIdleDrain", 10.0D,
+            "Idle drain for hyper-density cells", 0.0D, 100.0D
+        );
+        p.setLanguageKey(Tags.MODID + ".config.hdIdleDrain");
+        hdIdleDrain = p.getDouble();
+
+        p = config.get(CATEGORY_IDLE_DRAIN,
+            "hdCompactingIdleDrain", 20.0D,
+            "Idle drain for hyper-density compacting cells", 0.0D, 100.0D
+        );
+        p.setLanguageKey(Tags.MODID + ".config.hdCompactingIdleDrain");
+        hdCompactingIdleDrain = p.getDouble();
+
+        p = config.get(CATEGORY_IDLE_DRAIN,
+            "fluidHdIdleDrain", 10.0D,
+            "Idle drain for fluid hyper-density cells", 0.0D, 100.0D
+        );
+        p.setLanguageKey(Tags.MODID + ".config.fluidHdIdleDrain");
+        fluidHdIdleDrain = p.getDouble();
+
+        p = config.get(CATEGORY_IDLE_DRAIN,
+            "configurableCellIdleDrain", 3.0D,
+            "Idle drain for configurable cells", 0.0D, 100.0D
+        );
+        p.setLanguageKey(Tags.MODID + ".config.configurableCellIdleDrain");
+        configurableCellIdleDrain = p.getDouble();
+
+        // Enabled cells category
+        p = config.get(CATEGORY_ENABLED,
+            "enableCompactingCells", true,
+            "Enable compacting storage cells"
+        );
+        p.setLanguageKey(Tags.MODID + ".config.enableCompactingCells");
+        enableCompactingCells = p.getBoolean();
+
+        p = config.get(CATEGORY_ENABLED,
+            "enableHDCells", true,
+            "Enable hyper-density storage cells"
+        );
+        p.setLanguageKey(Tags.MODID + ".config.enableHDCells");
+        enableHDCells = p.getBoolean();
+
+        p = config.get(CATEGORY_ENABLED,
+            "enableHDCompactingCells", true,
+            "Enable hyper-density compacting storage cells"
+        );
+        p.setLanguageKey(Tags.MODID + ".config.enableHDCompactingCells");
+        enableHDCompactingCells = p.getBoolean();
+
+        p = config.get(CATEGORY_ENABLED,
+            "enableFluidHDCells", true,
+            "Enable fluid hyper-density storage cells"
+        );
+        p.setLanguageKey(Tags.MODID + ".config.enableFluidHDCells");
+        enableFluidHDCells = p.getBoolean();
+
+        p = config.get(CATEGORY_ENABLED,
+            "enableConfigurableCells", true,
+            "Enable configurable storage cells"
+        );
+        p.setLanguageKey(Tags.MODID + ".config.enableConfigurableCells");
+        enableConfigurableCells = p.getBoolean();
+
+        // Interfaces category
+
+        // Use String to handle Long.MAX_VALUE precisely (double loses precision above 2^53)
+        p = config.get(CATEGORY_INTERFACES,
+            "interfaceMaxSlotSizeLimit", String.valueOf(Long.MAX_VALUE),
+            "Maximum slot size limit for interfaces. Caps the user-configurable max slot size per slot. Use -1 for unlimited (Long.MAX_VALUE)."
+        );
+        p.setLanguageKey(Tags.MODID + ".config.interfaceMaxSlotSizeLimit");
+        String maxSlotStr = p.getString();
+        try {
+            long parsed = Long.parseLong(maxSlotStr);
+            interfaceMaxSlotSizeLimit = parsed < 0 ? Long.MAX_VALUE : Math.max(1, parsed);
+        } catch (NumberFormatException e) {
+            interfaceMaxSlotSizeLimit = Long.MAX_VALUE;
+        }
+
+        p = config.get(CATEGORY_INTERFACES,
+            "interfaceMinPollingRate", 0,
+            "Minimum polling rate for interfaces in ticks. 0 allows adaptive (AE2-managed tick rates). " +
+            "Higher values force interfaces to poll at least this often, reducing responsiveness but saving performance.", 0, Integer.MAX_VALUE
+        );
+        p.setLanguageKey(Tags.MODID + ".config.interfaceMinPollingRate");
+        interfaceMinPollingRate = p.getInt();
+
+        p = config.get(CATEGORY_INTERFACES,
+            "useFixedInterfaceTextures", true,
+            "Use fixed (non-animated) textures for interface blocks and parts. " +
+            "Requires a game restart to take effect."
+        );
+        p.setLanguageKey(Tags.MODID + ".config.useFixedInterfaceTextures");
+        useFixedInterfaceTextures = p.getBoolean();
+
+        String[] blacklistEntries = config.getStringList(
+            "essentiaContainerBlacklist", CATEGORY_INTERFACES,
+            defaultEssentiaContainerBlacklist,
+            "List of tile entity registry IDs that the Essentia Interface should ignore. " +
+            "Blacklisted tile entities will not be detected as adjacent essentia containers, " +
+            "preventing both push and pull operations. " +
+            "Use F3 or a mod like WAILA/TOP to find the tile entity ID (e.g. \"thaumcraft:thaumatorium\")."
+        );
+        config.getCategory(CATEGORY_INTERFACES)
+            .get("essentiaContainerBlacklist")
+            .setLanguageKey(Tags.MODID + ".config.essentiaContainerBlacklist");
+        Set<String> parsed = new HashSet<>();
+        for (String entry : blacklistEntries) {
+            String trimmed = entry.trim();
+            if (!trimmed.isEmpty()) parsed.add(trimmed);
+        }
+        essentiaContainerBlacklist = parsed;
+
+        // Subnet Proxy settings
+        p = config.get(CATEGORY_GENERAL,
+            "subnetProxyUpgradeSlots", 5,
+            "Number of upgrade slots for the Subnet Proxy (1-24)", 1, 24
+        );
+        p.setLanguageKey(Tags.MODID + ".config.subnetProxyUpgradeSlots");
+        subnetProxyUpgradeSlots = p.getInt();
+
+        p = config.get(CATEGORY_GENERAL,
+            "subnetProxyMinTickRate", 5,
+            "Minimum tick rate for the Subnet Proxy in ticks (lower = more responsive, higher = less CPU). " +
+            "This is the fastest the proxy will poll for changes.", 1, 200
+        );
+        p.setLanguageKey(Tags.MODID + ".config.subnetProxyMinTickRate");
+        subnetProxyMinTickRate = p.getInt();
+
+        p = config.get(CATEGORY_GENERAL,
+            "subnetProxyMaxTickRate", 60,
+            "Maximum tick rate for the Subnet Proxy in ticks (idle interval). " +
+            "This is the slowest the proxy will poll when no changes are detected.", 1, 1200
+        );
+        p.setLanguageKey(Tags.MODID + ".config.subnetProxyMaxTickRate");
+        subnetProxyMaxTickRate = p.getInt();
+
+        // Hidden category: GUI preferences (not shown in config GUI)
+        p = config.get(CATEGORY_HIDDEN, "showControlsHelp", true,
+            "Whether the controls help panel is visible in Interface GUIs.");
+        showControlsHelp = p.getBoolean();
+
         // Save if config was created or changed
         if (config.hasChanged()) config.save();
+    }
+
+    /**
+     * Persist the controls help panel visibility setting to the hidden config category.
+     * Must be called from the client side only.
+     *
+     * @param value true to show the panel, false to hide it
+     */
+    public static void setShowControlsHelp(boolean value) {
+        showControlsHelp = value;
+        config.get(CATEGORY_HIDDEN, "showControlsHelp", true).set(value);
+        config.save();
     }
 
     /**

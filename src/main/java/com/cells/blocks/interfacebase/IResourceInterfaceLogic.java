@@ -64,10 +64,40 @@ public interface IResourceInterfaceLogic<AE, K> extends IInterfaceLogic {
     int findSlotByKey(@Nonnull K key);
 
     /**
-     * Add a filter to the first available slot using AE stack type.
+     * Get storage data as an AE stack for container-level sync.
+     * Returns an AE stack with identity and amount, or null if the slot is empty.
      *
-     * @param stack The stack to add as a filter
-     * @return The slot index where the filter was added, or -1 if no space available
+     * @param slot The storage slot index (0-based, across all pages)
+     * @return An AE stack with identity and amount, or null
      */
-    int addToFirstAvailableSlotAE(@Nonnull AE stack);
+    @Nullable
+    AE getStorageAsAEStack(int slot);
+
+    /**
+     * Set storage from an AE stack received via container sync.
+     * Used on the client side when receiving storage updates from the server.
+     *
+     * @param slot    The storage slot index (0-based, across all pages)
+     * @param aeStack The AE stack containing identity and amount, or null to clear
+     */
+    void setStorageFromAEStack(int slot, @Nullable AE aeStack);
+
+    /**
+     * Get the amount stored in a specific slot.
+     * Uses long precision for accurate overflow handling.
+     *
+     * @param slot The storage slot index
+     * @return The amount stored in the slot (0 if invalid or empty)
+     */
+    long getSlotAmount(int slot);
+
+    /**
+     * Adjust the amount stored in a specific slot by a delta value.
+     * Used by GUI containers for long-safe insertion/extraction operations.
+     *
+     * @param slot  The storage slot index
+     * @param delta The amount to add (positive) or subtract (negative)
+     * @return The actual amount added/removed
+     */
+    long adjustSlotAmount(int slot, long delta);
 }

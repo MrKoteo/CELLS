@@ -174,7 +174,8 @@ public class ContainerItemInterface
         if (held.isEmpty()) {
             // Empty cursor: extract from storage
             if (isExport && !stored.isEmpty()) {
-                int storedCount = stored.getCount();
+                // Use long-based amount for accurate extraction calculation
+                long storedAmount = this.host.getStoredAmount(storageSlot);
 
                 // Calculate extraction amount:
                 // - Left-click: full stack (capped at 64)
@@ -182,27 +183,21 @@ public class ContainerItemInterface
                 int extractAmount;
                 if (halfStack) {
                     // Half-stack: take half (min 1, capped at 32 to ensure cursor limit)
-                    extractAmount = Math.max(1, Math.min(storedCount / 2, 32));
+                    extractAmount = (int) Math.max(1, Math.min(storedAmount / 2, 32));
                 } else {
                     // Full stack: take all (capped at 64)
-                    extractAmount = Math.min(storedCount, 64);
+                    extractAmount = (int) Math.min(storedAmount, 64);
                 }
 
                 ItemStack toExtract = stored.copy();
                 toExtract.setCount(extractAmount);
 
-                if (extractAmount >= storedCount) {
-                    storage.setStackInSlot(storageSlot, ItemStack.EMPTY);
-                } else {
-                    ItemStack remainder = stored.copy();
-                    remainder.shrink(extractAmount);
-                    storage.setStackInSlot(storageSlot, remainder);
-                }
+                // Use adjustStoredAmount for proper long handling (negative to extract)
+                this.host.adjustStoredAmount(storageSlot, -extractAmount);
 
                 player.inventory.setItemStack(toExtract);
                 this.updateHeld(player);
                 this.host.refreshFilterMap();
-                this.host.markForNetworkUpdate();
             }
             // Import mode: can't extract, do nothing
             return true;
@@ -221,7 +216,7 @@ public class ContainerItemInterface
 
         if (stored.isEmpty()) {
             // Empty slot: insert held item
-            int maxInsert = Math.min(insertAmount, this.host.getMaxSlotSize());
+            int maxInsert = (int) Math.min(insertAmount, this.host.getEffectiveMaxSlotSize(storageSlot));
             ItemStack toInsert = held.copy();
             toInsert.setCount(maxInsert);
             storage.setStackInSlot(storageSlot, toInsert);
@@ -229,7 +224,7 @@ public class ContainerItemInterface
             if (held.isEmpty()) player.inventory.setItemStack(ItemStack.EMPTY);
             this.updateHeld(player);
             this.host.refreshFilterMap();
-            this.host.markForNetworkUpdate();
+
             return true;
         }
 
@@ -239,15 +234,17 @@ public class ContainerItemInterface
         }
 
         // Same item: merge (respecting halfStack = single item insertion)
-        int space = this.host.getMaxSlotSize() - stored.getCount();
-        int toTransfer = Math.min(insertAmount, space);
+        // Use host.getStoredAmount() for accurate long-based space calculation
+        long currentAmount = this.host.getStoredAmount(storageSlot);
+        long space = this.host.getEffectiveMaxSlotSize(storageSlot) - currentAmount;
+        int toTransfer = (int) Math.min(insertAmount, Math.min(space, Integer.MAX_VALUE));
         if (toTransfer > 0) {
-            stored.grow(toTransfer);
+            // Use adjustStoredAmount for proper long handling
+            this.host.adjustStoredAmount(storageSlot, toTransfer);
             held.shrink(toTransfer);
             if (held.isEmpty()) player.inventory.setItemStack(ItemStack.EMPTY);
             this.updateHeld(player);
             this.host.refreshFilterMap();
-            this.host.markForNetworkUpdate();
         }
 
         return true;
@@ -272,37 +269,45 @@ public class ContainerItemInterface
         ItemStack stored = storage.getStackInSlot(storageSlot);
         if (stored.isEmpty()) return true;
 
-        // Transfer to player inventory, respecting vanilla stack limits
-        ItemStack remainder = stored.copy();
-        int vanillaMax = remainder.getMaxStackSize();
+        // Get the actual long amount for proper tracking
+        long remainingAmount = this.host.getStoredAmount(storageSlot);
+        ItemStack template = stored.copy();
+        int vanillaMax = template.getMaxStackSize();
 
-        for (int i = 0; i < player.inventory.mainInventory.size() && !remainder.isEmpty(); i++) {
+        long totalTransferred = 0;
+
+        for (int i = 0; i < player.inventory.mainInventory.size() && remainingAmount > 0; i++) {
             ItemStack invStack = player.inventory.mainInventory.get(i);
 
             if (invStack.isEmpty()) {
                 // Empty slot: insert up to vanilla max
-                int toInsert = Math.min(remainder.getCount(), vanillaMax);
-                ItemStack newStack = remainder.copy();
+                int toInsert = (int) Math.min(remainingAmount, vanillaMax);
+                ItemStack newStack = template.copy();
                 newStack.setCount(toInsert);
                 player.inventory.mainInventory.set(i, newStack);
-                remainder.shrink(toInsert);
-            } else if (ItemStack.areItemsEqual(invStack, remainder) &&
-                       ItemStack.areItemStackTagsEqual(invStack, remainder)) {
+                remainingAmount -= toInsert;
+                totalTransferred += toInsert;
+            } else if (ItemStack.areItemsEqual(invStack, template) &&
+                       ItemStack.areItemStackTagsEqual(invStack, template)) {
                 // Matching stack: merge up to vanilla max
                 int space = vanillaMax - invStack.getCount();
-                int toTransfer = Math.min(remainder.getCount(), space);
+                int toTransfer = (int) Math.min(remainingAmount, space);
                 if (toTransfer > 0) {
                     invStack.grow(toTransfer);
-                    remainder.shrink(toTransfer);
+                    remainingAmount -= toTransfer;
+                    totalTransferred += toTransfer;
                 }
             }
         }
 
-        // Update storage with whatever couldn't be transferred
-        storage.setStackInSlot(storageSlot, remainder);
+        // Update storage using adjustStoredAmount for proper long handling
+        if (totalTransferred > 0) {
+            this.host.adjustStoredAmount(storageSlot, -totalTransferred);
+        }
+
         this.host.refreshFilterMap();
-        this.host.markForNetworkUpdate();
         this.detectAndSendChanges();
+
         return true;
     }
 

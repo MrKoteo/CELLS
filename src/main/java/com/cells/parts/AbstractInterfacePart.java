@@ -1,13 +1,10 @@
 package com.cells.parts;
 
-import java.io.IOException;
 import java.util.EnumSet;
 import java.util.List;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-
-import io.netty.buffer.ByteBuf;
 
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
@@ -17,7 +14,10 @@ import net.minecraft.util.EnumFacing;
 import net.minecraft.util.EnumHand;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.World;
+
+import net.minecraftforge.items.IItemHandler;
 
 import appeng.api.implementations.items.IMemoryCard;
 import appeng.api.implementations.items.MemoryCardMessages;
@@ -41,8 +41,6 @@ import appeng.parts.PartModel;
 import appeng.tile.inventory.AppEngInternalInventory;
 import appeng.util.SettingsFrom;
 import appeng.util.inv.InvOperation;
-
-import net.minecraftforge.items.IItemHandler;
 
 import com.cells.blocks.interfacebase.AbstractResourceInterfaceLogic;
 import com.cells.blocks.interfacebase.IInterfaceHost;
@@ -78,6 +76,11 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
 
     protected final IActionSource actionSource;
     protected L logic;
+
+    // Debounce for markDirtyAndSave
+    // getTotalWorldTime is two field reads + a long compare,
+    // markChunkDirty is two chunk map lookups + a boolean write.
+    private long lastSaveTick = -1;
 
     protected AbstractInterfacePart(final ItemStack is) {
         super(is);
@@ -116,7 +119,10 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
      * Get the memory card translation key for this part type.
      * E.g., "tile.cells.import_interface" or "tile.cells.export_interface"
      */
-    protected abstract String getMemoryCardName();
+    protected String getMemoryCardName() {
+        String dirKey = this.isExport() ? "export" : "import";
+        return "tile.cells." + dirKey + "_interface." + this.logic.getTypeName();
+    }
 
     // ============================== IInterfaceHost.Host callbacks ==============================
 
@@ -136,12 +142,22 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
 
     @Override
     public void markDirtyAndSave() {
-        this.getHost().markForSave();
-    }
+        TileEntity te = this.getHost().getTile();
+        if (te == null) return;
 
-    @Override
-    public void markForNetworkUpdate() {
-        this.getHost().markForUpdate();
+        World w = te.getWorld();
+        // World may be null on tile load
+        //noinspection ConstantValue
+        if (w == null || w.isRemote) return;
+
+        // Debounce to once per tick
+        long currentTick = w.getTotalWorldTime();
+        if (this.lastSaveTick == currentTick) return;
+        this.lastSaveTick = currentTick;
+
+        // Call markChunkDirty directly on the host tile to flag the chunk for saving.
+        // We intentionally skip markForSave() / saveChanges() to bypass the bloat.
+        w.markChunkDirty(te.getPos(), te);
     }
 
     @Override
@@ -176,9 +192,7 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
 
     @Override
     public void onChangeInventory(IItemHandler inv, int slot, InvOperation mc, ItemStack removed, ItemStack added) {
-        if (inv == this.logic.getUpgradeInventory()) {
-            this.logic.onUpgradeChanged();
-        }
+        this.logic.onChangeInventory(inv, slot, removed, added);
         this.getHost().markForUpdate();
     }
 
@@ -207,26 +221,43 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
         return this.logic.getUpgradeInventory();
     }
 
-    public void refreshFilterMap() {
-        this.logic.refreshFilterMap();
-    }
-
     public void refreshUpgrades() {
         this.logic.refreshUpgrades();
     }
 
-    public boolean isValidUpgrade(ItemStack stack) {
-        return this.logic.isValidUpgrade(stack);
+    @Override
+    public long validateMaxSlotSize(long size) {
+        return this.logic.validateMaxSlotSize(size);
     }
 
     @Override
-    public int getMaxSlotSize() {
+    public long getMaxSlotSize() {
         return this.logic.getMaxSlotSize();
     }
 
     @Override
-    public void setMaxSlotSize(int size) {
-        this.logic.setMaxSlotSize(size);
+    public long setMaxSlotSize(long size) {
+        return this.logic.setMaxSlotSize(size);
+    }
+
+    @Override
+    public long getEffectiveMaxSlotSize(int slot) {
+        return this.logic.getEffectiveMaxSlotSize(slot);
+    }
+
+    @Override
+    public long setMaxSlotSizeOverride(int slot, long size) {
+        return this.logic.setMaxSlotSizeOverride(slot, size);
+    }
+
+    @Override
+    public long getMaxSlotSizeOverride(int slot) {
+        return this.logic.getMaxSlotSizeOverride(slot);
+    }
+
+    @Override
+    public void clearMaxSlotSizeOverride(int slot) {
+        this.logic.clearMaxSlotSizeOverride(slot);
     }
 
     @Override
@@ -235,16 +266,8 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
     }
 
     @Override
-    public void setPollingRate(int ticks) {
-        this.logic.setPollingRate(ticks);
-    }
-
-    public void setPollingRate(int ticks, EntityPlayer player) {
-        this.logic.setPollingRate(ticks, player);
-    }
-
-    public int getInstalledCapacityUpgrades() {
-        return this.logic.getInstalledCapacityUpgrades();
+    public int setPollingRate(int ticks) {
+        return this.logic.setPollingRate(ticks);
     }
 
     public int getTotalPages() {
@@ -257,18 +280,6 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
 
     public void setCurrentPage(int page) {
         this.logic.setCurrentPage(page);
-    }
-
-    public int getCurrentPageStartSlot() {
-        return this.logic.getCurrentPageStartSlot();
-    }
-
-    public boolean hasOverflowUpgrade() {
-        return this.logic.hasOverflowUpgrade();
-    }
-
-    public boolean hasTrashUnselectedUpgrade() {
-        return this.logic.hasTrashUnselectedUpgrade();
     }
 
     @Override
@@ -298,6 +309,18 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
     @Override
     public float getCableConnectionLength(AECableType cable) {
         return 4;
+    }
+
+    // ============================== Grid lifecycle ==============================
+
+    @Override
+    public void addToWorld() {
+        super.addToWorld();
+
+        // Re-scan the capability cache now that all TEs are in the world and the
+        // grid proxy is ready. During readFromNBT, adjacent TEs may not have been
+        // loaded yet, leaving the push/pull card's cache empty.
+        this.logic.onGridReady();
     }
 
     // ============================== Network events ==============================
@@ -372,21 +395,6 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
     // ============================== Stream sync ==============================
 
     @Override
-    public boolean readFromStream(final ByteBuf data) throws IOException {
-        boolean result = super.readFromStream(data);
-        result |= this.logic.readStorageFromStream(data);
-        result |= this.logic.readFiltersFromStream(data);
-        return result;
-    }
-
-    @Override
-    public void writeToStream(final ByteBuf data) throws IOException {
-        super.writeToStream(data);
-        this.logic.writeStorageToStream(data);
-        this.logic.writeFiltersToStream(data);
-    }
-
-    @Override
     public void onPlacement(final EntityPlayer player, final EnumHand hand, final ItemStack held, final AEPartLocation side) {
         super.onPlacement(player, hand, held, side);
         if (held.hasTagCompound()) {
@@ -420,7 +428,7 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
 
         if (player.isSneaking()) {
             final NBTTagCompound data = this.downloadSettings(SettingsFrom.MEMORY_CARD);
-            if (data != null && !data.isEmpty()) {
+            if (!data.isEmpty()) {
                 memoryCard.setMemoryCardContents(memCardIS, name, data);
                 memoryCard.notifyUser(player, MemoryCardMessages.SETTINGS_SAVED);
             }
@@ -471,6 +479,15 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
         }
     }
 
+    // ============================== Neighbor change delegation ==============================
+
+    @Override
+    public void onNeighborChanged(IBlockAccess w, BlockPos pos, BlockPos neighbor) {
+        if (this.logic instanceof AbstractResourceInterfaceLogic) {
+            ((AbstractResourceInterfaceLogic<?, ?, ?>) this.logic).onNeighborChanged(neighbor);
+        }
+    }
+
     // ============================== IGridTickable ==============================
 
     @Override
@@ -482,7 +499,7 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
     @Override
     @Nonnull
     public TickRateModulation tickingRequest(@Nonnull final IGridNode node, final int ticksSinceLastCall) {
-        return this.logic.onTick();
+        return this.logic.onTick(ticksSinceLastCall);
     }
 
     // ============================== Utility methods ==============================
@@ -492,6 +509,15 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
     }
 
     public EnumSet<EnumFacing> getTargets() {
+        return EnumSet.of(this.getSide().getFacing());
+    }
+
+    /**
+     * Parts only interact with the block on their attached side,
+     * unlike full-block tiles which interact with all 6 adjacent blocks.
+     */
+    @Override
+    public EnumSet<EnumFacing> getTargetFacings() {
         return EnumSet.of(this.getSide().getFacing());
     }
 }

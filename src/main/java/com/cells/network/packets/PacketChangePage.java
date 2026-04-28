@@ -8,8 +8,9 @@ import net.minecraftforge.fml.common.network.simpleimpl.IMessage;
 import net.minecraftforge.fml.common.network.simpleimpl.IMessageHandler;
 import net.minecraftforge.fml.common.network.simpleimpl.MessageContext;
 
-import com.cells.blocks.interfacebase.item.ContainerItemInterface;
-import com.cells.blocks.interfacebase.fluid.ContainerFluidInterface;
+import com.cells.blocks.interfacebase.AbstractContainerInterface;
+import com.cells.blocks.combinedinterface.ContainerCombinedInterface;
+import com.cells.gui.subnetproxy.ContainerSubnetProxy;
 
 
 /**
@@ -46,10 +47,15 @@ public class PacketChangePage implements IMessage {
             player.getServerWorld().addScheduledTask(() -> {
                 Container container = player.openContainer;
 
-                if (container instanceof ContainerItemInterface) {
-                    ((ContainerItemInterface) container).setCurrentPage(message.page);
-                } else if (container instanceof ContainerFluidInterface) {
-                    ((ContainerFluidInterface) container).setCurrentPage(message.page);
+                // AbstractContainerInterface covers all single-type interfaces
+                // (item, fluid, gas, essentia). ContainerCombinedInterface is
+                // separate because it extends AEBaseContainer directly.
+                if (container instanceof AbstractContainerInterface) {
+                    ((AbstractContainerInterface<?, ?, ?>) container).setCurrentPage(message.page);
+                } else if (container instanceof ContainerCombinedInterface) {
+                    ((ContainerCombinedInterface) container).setCurrentPage(message.page);
+                } else if (container instanceof ContainerSubnetProxy) {
+                    ((ContainerSubnetProxy) container).setCurrentPage(message.page);
                 }
             });
 

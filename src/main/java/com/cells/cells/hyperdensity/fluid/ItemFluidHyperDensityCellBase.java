@@ -20,6 +20,8 @@ import appeng.api.storage.ICellInventory;
 import appeng.api.storage.ICellInventoryHandler;
 import appeng.api.storage.channels.IFluidStorageChannel;
 import appeng.api.storage.data.IAEFluidStack;
+import appeng.fluids.helper.FluidCellConfig;
+import appeng.util.ReadableNumberConverter;
 
 import com.cells.cells.common.AbstractTieredCellItem;
 import com.cells.cells.common.INBTSizeProvider;
@@ -79,12 +81,22 @@ public abstract class ItemFluidHyperDensityCellBase extends AbstractTieredCellIt
 
         AEApi.instance().client().addCellInformation(cellHandler, tooltip);
 
-        CellUpgradeHelper.addUpgradeTooltips(getUpgradesInventory(stack), tooltip);
-
-        // Add NBT size information (if enabled in config)
-        if (CellsConfig.enableNbtSizeTooltip && cellHandler != null) {
+        // Get capacity and types from the cell inventory for upgrade tooltips
+        if (cellHandler != null) {
             ICellInventory<IAEFluidStack> cellInv = cellHandler.getCellInv();
-            if (cellInv instanceof INBTSizeProvider) {
+
+            if (cellInv instanceof FluidHyperDensityCellInventory) {
+                CellUpgradeHelper.addUpgradeTooltips(getUpgradesInventory(stack), tooltip);
+            }
+
+            if (CellUpgradeHelper.hasEqualDistributionUpgrade(getUpgradesInventory(stack))) {
+                long perType = this.getBytesPerType(stack);
+                String perTypeShort = ReadableNumberConverter.INSTANCE.toWideReadableForm(perType);
+                tooltip.add("§b" + I18n.format("tooltip.cells.upgrade.per_type", perType, perTypeShort));
+            }
+
+            // Add NBT size information (if enabled in config)
+            if (CellsConfig.enableNbtSizeTooltip && cellInv instanceof INBTSizeProvider) {
                 int nbtSize = ((INBTSizeProvider) cellInv).getTotalNbtSize();
                 long warningThreshold = NBTSizeHelper.kbToBytes(CellsConfig.nbtSizeWarningThresholdKB);
                 String sizeStr = NBTSizeHelper.formatSizeWithColor(nbtSize, warningThreshold);
@@ -179,6 +191,11 @@ public abstract class ItemFluidHyperDensityCellBase extends AbstractTieredCellIt
     @Override
     public boolean isHyperDensityCell(@Nonnull ItemStack i) {
         return true;
+    }
+
+    @Override
+    public IItemHandler getConfigInventory(ItemStack is) {
+        return new FluidCellConfig(is);
     }
 
     // =====================

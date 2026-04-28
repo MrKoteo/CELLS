@@ -12,6 +12,8 @@ import net.minecraft.item.crafting.CraftingManager;
 import net.minecraft.item.crafting.IRecipe;
 import net.minecraft.world.World;
 
+import com.cells.util.CellMathHelper;
+
 
 /**
  * Utility class for finding compression/decompression relationships between items.
@@ -28,9 +30,6 @@ public class CompactingHelper {
 
     /** Default number of tiers when no tier card is installed. */
     public static final int DEFAULT_TIERS = 3;
-
-    /** Maximum supported tiers (for 15x cards). */
-    public static final int MAX_SUPPORTED_TIERS = 15;
 
     private static final InventoryLookup lookup1 = new InventoryLookup(1, 1);
     private static final InventoryLookup lookup2 = new InventoryLookup(2, 2);
@@ -52,7 +51,7 @@ public class CompactingHelper {
     public static class CompressionChain {
 
         private final ItemStack[] stacks;
-        private final int[] rates;
+        private final long[] rates;
         private final int mainTierIndex;
         private final int maxTiers;
 
@@ -63,7 +62,7 @@ public class CompactingHelper {
         public CompressionChain(int maxTiers) {
             this.maxTiers = maxTiers;
             this.stacks = new ItemStack[maxTiers];
-            this.rates = new int[maxTiers];
+            this.rates = new long[maxTiers];
             this.mainTierIndex = 0;
 
             for (int i = 0; i < maxTiers; i++) {
@@ -72,10 +71,10 @@ public class CompactingHelper {
             }
         }
 
-        public CompressionChain(ItemStack[] chain, int[] convRates, int mainTierIndex, int maxTiers) {
+        public CompressionChain(ItemStack[] chain, long[] convRates, int mainTierIndex, int maxTiers) {
             this.maxTiers = maxTiers;
             this.stacks = new ItemStack[maxTiers];
-            this.rates = new int[maxTiers];
+            this.rates = new long[maxTiers];
             this.mainTierIndex = mainTierIndex;
 
             for (int i = 0; i < maxTiers; i++) {
@@ -98,7 +97,7 @@ public class CompactingHelper {
          * The rate is relative to the lowest tier (base = 1).
          * @param tier 0=highest, increasing=less compressed
          */
-        public int getRate(int tier) {
+        public long getRate(int tier) {
             return tier >= 0 && tier < maxTiers ? rates[tier] : 0;
         }
 
@@ -320,7 +319,7 @@ public class CompactingHelper {
         int mainTierIndex = upStacks.size(); // Main item is after all up tiers
 
         ItemStack[] chain = new ItemStack[totalTiers];
-        int[] rates = new int[totalTiers];
+        long[] rates = new long[totalTiers];
 
         // Fill chain: highest (most compressed) first
         // upStacks are in order [first up, second up, ...] so reverse for chain order
@@ -356,7 +355,9 @@ public class CompactingHelper {
                 ratio = (upIdx < upRatios.size()) ? upRatios.get(upIdx) : 1;
             }
 
-            rates[i] = rates[i + 1] * ratio;
+            // Use overflow-protected multiplication to prevent silent overflow with
+            // deep compression chains (10+ tiers of 9x can exceed int and even long range)
+            rates[i] = CellMathHelper.multiplyWithOverflowProtection(rates[i + 1], ratio);
         }
 
         return new CompressionChain(chain, rates, mainTierIndex, totalTiers);

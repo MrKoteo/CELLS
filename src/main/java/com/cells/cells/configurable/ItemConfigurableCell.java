@@ -36,7 +36,6 @@ import appeng.api.storage.channels.IFluidStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.api.storage.data.IAEFluidStack;
 import appeng.core.localization.GuiText;
-import appeng.items.contents.CellConfig;
 import appeng.util.InventoryAdaptor;
 import appeng.util.Platform;
 import appeng.util.ReadableNumberConverter;
@@ -140,6 +139,7 @@ public class ItemConfigurableCell extends Item implements ICellWorkbenchItem, II
             // No component installed - show warning
             tooltip.add("§c" + I18n.format("tooltip.cells.configurable_cell.no_component"));
             tooltip.add("");
+            tooltip.add("§b" + I18n.format("tooltip.cells.click_to_configure"));
             tooltip.add("§7" + I18n.format("tooltip.cells.configurable_cell.info"));
             return;
         }
@@ -213,6 +213,7 @@ public class ItemConfigurableCell extends Item implements ICellWorkbenchItem, II
         // Show cell description
         tooltip.add("");
         tooltip.add("§7" + I18n.format("tooltip.cells.configurable_cell.info"));
+        tooltip.add("§b" + I18n.format("tooltip.cells.click_to_configure"));
     }
 
     // =====================
@@ -334,7 +335,10 @@ public class ItemConfigurableCell extends Item implements ICellWorkbenchItem, II
 
     @Override
     public IItemHandler getConfigInventory(ItemStack is) {
-        return new CellConfig(is);
+        ComponentInfo info = ComponentHelper.getComponentInfo(ComponentHelper.getInstalledComponent(is));
+        ChannelType channelType = info != null ? info.getChannelType() : ChannelType.ITEM;
+
+        return ConfigInventoryHelper.getConfigInventory(is, channelType);
     }
 
     @Override

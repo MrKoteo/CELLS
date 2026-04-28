@@ -7,13 +7,15 @@ import net.minecraft.world.World;
 import net.minecraftforge.fml.common.network.IGuiHandler;
 
 import appeng.api.parts.IPart;
-import appeng.api.util.AEPartLocation;
 
 import com.cells.blocks.interfacebase.ContainerMaxSlotSize;
 import com.cells.blocks.interfacebase.ContainerPollingRate;
 import com.cells.blocks.interfacebase.GuiMaxSlotSize;
 import com.cells.blocks.interfacebase.GuiPollingRate;
 import com.cells.blocks.interfacebase.IInterfaceHost;
+import com.cells.blocks.iointerface.ContainerIOInterface;
+import com.cells.blocks.iointerface.GuiIOInterface;
+import com.cells.blocks.iointerface.IIOInterfaceHost;
 import com.cells.gui.GuiIdUtils;
 
 
@@ -31,20 +33,14 @@ public class GasInterfaceGuiHandler implements IGuiHandler {
     public static final int GUI_GAS_EXPORT_INTERFACE = 201;
     public static final int GUI_GAS_MAX_SLOT_SIZE = 202;
     public static final int GUI_GAS_POLLING_RATE = 203;
+    public static final int GUI_GAS_IO_INTERFACE = 204;
 
     // Part-based GUI IDs (require side encoding)
     public static final int GUI_PART_GAS_IMPORT_INTERFACE = 300;
     public static final int GUI_PART_GAS_EXPORT_INTERFACE = 301;
     public static final int GUI_PART_GAS_MAX_SLOT_SIZE = 302;
     public static final int GUI_PART_GAS_POLLING_RATE = 303;
-
-    /**
-     * Open a GUI for a part, encoding the side information.
-     * Convenience method that delegates to {@link GuiIdUtils#openPartGui}.
-     */
-    public static void openPartGui(EntityPlayer player, TileEntity tile, AEPartLocation side, int guiId) {
-        GuiIdUtils.openPartGui(player, tile, side, guiId);
-    }
+    public static final int GUI_PART_GAS_IO_INTERFACE = 304;
 
     /**
      * Check if a GUI ID is for a gas part (encoded with side, base >= 300).
@@ -58,12 +54,12 @@ public class GasInterfaceGuiHandler implements IGuiHandler {
      * Check if a GUI ID belongs to this handler.
      */
     public static boolean isGasInterfaceGuiId(int id) {
-        // Block GUIs: 200-203
-        if (id >= 200 && id <= 203) return true;
+        // Block GUIs: 200-204
+        if (id >= 200 && id <= 204) return true;
 
-        // Part GUIs: encoded with base 300-303
+        // Part GUIs: encoded with base 300-304
         int baseId = GuiIdUtils.getBaseGuiId(id);
-        return baseId >= 300 && baseId <= 303;
+        return baseId >= 300 && baseId <= 304;
     }
 
     @Override
@@ -100,6 +96,12 @@ public class GasInterfaceGuiHandler implements IGuiHandler {
                         return new ContainerPollingRate(player.inventory, (IInterfaceHost) part);
                     }
                     break;
+
+                case GUI_PART_GAS_IO_INTERFACE:
+                    if (part instanceof IIOInterfaceHost) {
+                        return new ContainerIOInterface(player.inventory, part);
+                    }
+                    break;
             }
 
             return null;
@@ -128,6 +130,12 @@ public class GasInterfaceGuiHandler implements IGuiHandler {
             case GUI_GAS_POLLING_RATE:
                 if (tile instanceof IInterfaceHost) {
                     return new ContainerPollingRate(player.inventory, (IInterfaceHost) tile);
+                }
+                break;
+
+            case GUI_GAS_IO_INTERFACE:
+                if (tile instanceof IIOInterfaceHost) {
+                    return new ContainerIOInterface(player.inventory, tile);
                 }
                 break;
         }
@@ -169,6 +177,12 @@ public class GasInterfaceGuiHandler implements IGuiHandler {
                         return new GuiPollingRate(player.inventory, (IInterfaceHost) part);
                     }
                     break;
+
+                case GUI_PART_GAS_IO_INTERFACE:
+                    if (part instanceof IIOInterfaceHost) {
+                        return new GuiIOInterface(player.inventory, part);
+                    }
+                    break;
             }
 
             return null;
@@ -197,6 +211,12 @@ public class GasInterfaceGuiHandler implements IGuiHandler {
             case GUI_GAS_POLLING_RATE:
                 if (tile instanceof IInterfaceHost) {
                     return new GuiPollingRate(player.inventory, (IInterfaceHost) tile);
+                }
+                break;
+
+            case GUI_GAS_IO_INTERFACE:
+                if (tile instanceof IIOInterfaceHost) {
+                    return new GuiIOInterface(player.inventory, tile);
                 }
                 break;
         }

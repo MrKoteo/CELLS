@@ -1,7 +1,9 @@
 package com.cells.integration.mekanismenergistics;
 
 import net.minecraft.block.Block;
+import net.minecraft.block.state.IBlockState;
 import net.minecraft.client.renderer.block.model.ModelResourceLocation;
+import net.minecraft.client.renderer.block.statemap.StateMapperBase;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemBlock;
 import net.minecraft.util.ResourceLocation;
@@ -14,8 +16,12 @@ import net.minecraftforge.registries.IForgeRegistry;
 import appeng.api.AEApi;
 import appeng.api.parts.IPartModels;
 import appeng.block.AEBaseItemBlock;
+import appeng.core.features.ActivityState;
+import appeng.core.features.BlockStackSrc;
+import appeng.tile.AEBaseTile;
 
 import com.cells.Tags;
+import com.cells.config.CellsConfig;
 
 
 /**
@@ -27,6 +33,7 @@ public final class GasBlockRegistry {
 
     public static BlockGasImportInterface GAS_IMPORT_INTERFACE;
     public static BlockGasExportInterface GAS_EXPORT_INTERFACE;
+    public static BlockGasIOInterface GAS_IO_INTERFACE;
     public static ItemGasPart GAS_PART;
 
     private GasBlockRegistry() {}
@@ -38,15 +45,27 @@ public final class GasBlockRegistry {
     public static void registerBlocks(IForgeRegistry<Block> registry) {
         GAS_IMPORT_INTERFACE = new BlockGasImportInterface();
         GAS_EXPORT_INTERFACE = new BlockGasExportInterface();
+        GAS_IO_INTERFACE = new BlockGasIOInterface();
 
         registry.register(GAS_IMPORT_INTERFACE);
         registry.register(GAS_EXPORT_INTERFACE);
+        registry.register(GAS_IO_INTERFACE);
 
         // Register tile entities
         GameRegistry.registerTileEntity(TileGasImportInterface.class,
             new ResourceLocation(Tags.MODID, "import_gas_interface"));
         GameRegistry.registerTileEntity(TileGasExportInterface.class,
             new ResourceLocation(Tags.MODID, "export_gas_interface"));
+        GameRegistry.registerTileEntity(TileGasIOInterface.class,
+            new ResourceLocation(Tags.MODID, "io_gas_interface"));
+
+        // Register tile-to-item mappings for Network Tool display
+        AEBaseTile.registerTileItem(TileGasImportInterface.class,
+            new BlockStackSrc(GAS_IMPORT_INTERFACE, 0, ActivityState.Enabled));
+        AEBaseTile.registerTileItem(TileGasExportInterface.class,
+            new BlockStackSrc(GAS_EXPORT_INTERFACE, 0, ActivityState.Enabled));
+        AEBaseTile.registerTileItem(TileGasIOInterface.class,
+            new BlockStackSrc(GAS_IO_INTERFACE, 0, ActivityState.Enabled));
     }
 
     /**
@@ -57,6 +76,7 @@ public final class GasBlockRegistry {
         // Register block items
         registry.register(createItemBlock(GAS_IMPORT_INTERFACE));
         registry.register(createItemBlock(GAS_EXPORT_INTERFACE));
+        registry.register(createItemBlock(GAS_IO_INTERFACE));
 
         // Register gas part item
         GAS_PART = new ItemGasPart();
@@ -89,15 +109,34 @@ public final class GasBlockRegistry {
     public static void registerModels() {
         registerBlockModel(GAS_IMPORT_INTERFACE);
         registerBlockModel(GAS_EXPORT_INTERFACE);
+        registerBlockModel(GAS_IO_INTERFACE);
 
         if (GAS_PART != null) GAS_PART.registerModels();
     }
 
     @SideOnly(Side.CLIENT)
     private static void registerBlockModel(Block block) {
+        ResourceLocation regName = block.getRegistryName();
+
+        if (CellsConfig.useFixedInterfaceTextures) {
+            ResourceLocation fixedModel = new ResourceLocation(regName.getNamespace(), regName.getPath() + "_fixed");
+            ModelResourceLocation fixedModelLoc = new ModelResourceLocation(fixedModel, "inventory");
+
+            ModelLoader.setCustomModelResourceLocation(Item.getItemFromBlock(block), 0, fixedModelLoc);
+
+            ModelLoader.setCustomStateMapper(block, new StateMapperBase() {
+                @Override
+                protected ModelResourceLocation getModelResourceLocation(IBlockState state) {
+                    return new ModelResourceLocation(fixedModel, "normal");
+                }
+            });
+
+            return;
+        }
+
         ModelLoader.setCustomModelResourceLocation(
             Item.getItemFromBlock(block), 0,
-            new ModelResourceLocation(block.getRegistryName(), "inventory")
+            new ModelResourceLocation(regName, "inventory")
         );
     }
 }

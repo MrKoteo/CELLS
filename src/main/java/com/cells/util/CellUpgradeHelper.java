@@ -44,6 +44,25 @@ public final class CellUpgradeHelper {
     }
 
     /**
+     * Checks if an Equal Distribution Card is installed in the given upgrade inventory.
+     *
+     * @param upgrades The upgrade inventory to check
+     * @return true if an Equal Distribution Card is found
+     */
+    public static boolean hasEqualDistributionUpgrade(IItemHandler upgrades) {
+        if (upgrades == null) return false;
+
+        for (int i = 0; i < upgrades.getSlots(); i++) {
+            ItemStack stack = upgrades.getStackInSlot(i);
+            if (stack.isEmpty()) continue;
+
+            if (stack.getItem() == ItemRegistry.EQUAL_DISTRIBUTION_CARD) return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Gets the Equal Distribution Card tier value, or 0 if not installed.
      * <p>
      * Returns the type limit value (1, 2, 4, 8, 16, 32, or 63) from the
@@ -114,16 +133,6 @@ public final class CellUpgradeHelper {
         }
 
         return 0;
-    }
-
-    /**
-     * Checks if a compression or decompression tier card is installed.
-     *
-     * @param upgrades The upgrade inventory to check
-     * @return true if any tier card is installed
-     */
-    public static boolean hasTierCard(IItemHandler upgrades) {
-        return getCompressionTiers(upgrades) > 0 || getDecompressionTiers(upgrades) > 0;
     }
 
     /**

@@ -17,6 +17,7 @@ import appeng.api.parts.IPart;
 import appeng.util.Platform;
 
 import com.cells.Tags;
+import com.cells.config.CellsConfig;
 import com.cells.parts.PartModelsHelper;
 
 
@@ -27,7 +28,8 @@ import com.cells.parts.PartModelsHelper;
  */
 public enum CellsGasPartType {
     GAS_IMPORT_INTERFACE("import_gas_interface", PartGasImportInterface.class),
-    GAS_EXPORT_INTERFACE("export_gas_interface", PartGasExportInterface.class);
+    GAS_EXPORT_INTERFACE("export_gas_interface", PartGasExportInterface.class),
+    GAS_IO_INTERFACE("io_gas_interface", PartGasIOInterface.class);
 
     private final String id;
     private final Class<? extends IPart> partClass;
@@ -57,16 +59,13 @@ public enum CellsGasPartType {
 
     @SideOnly(Side.CLIENT)
     private static ModelResourceLocation modelFromBaseName(String baseName) {
-        return new ModelResourceLocation(new ResourceLocation(Tags.MODID, "part/" + baseName), "inventory");
+        String suffix = CellsConfig.useFixedInterfaceTextures ? "_fixed" : "";
+        return new ModelResourceLocation(new ResourceLocation(Tags.MODID, "part/" + baseName + suffix), "inventory");
     }
 
     @SideOnly(Side.CLIENT)
     private List<ModelResourceLocation> createItemModels(String baseName) {
         return ImmutableList.of(modelFromBaseName(baseName));
-    }
-
-    public String getId() {
-        return this.id;
     }
 
     public int getBaseDamage() {

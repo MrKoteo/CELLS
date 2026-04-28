@@ -1,0 +1,14 @@
+{
+    "type": "minecraft:crafting_shapeless",
+    "ingredients": [
+        {
+            "item": "cells:equal_distribution_card",
+            "data": 6
+        }
+    ],
+    "result": {
+        "item": "cells:equal_distribution_card",
+        "count": 1,
+        "data": 0
+    }
+}

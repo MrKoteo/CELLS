@@ -1,12 +1,9 @@
 package com.cells.blocks.interfacebase;
 
-import java.io.IOException;
 import java.util.List;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-
-import io.netty.buffer.ByteBuf;
 
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
@@ -68,6 +65,11 @@ public abstract class AbstractInterfaceTile<L extends IInterfaceLogic> extends A
     // Storage is managed by the logic and serialized via writeToStream/readFromStream.
     private final AppEngInternalInventory dummyInventory = new AppEngInternalInventory(this, 0, 0);
 
+    // Debounce for markDirtyAndSave
+    // getTotalWorldTime is two field reads + a long compare,
+    // markChunkDirty is two chunk map lookups + a boolean write.
+    private long lastSaveTick = -1;
+
     protected AbstractInterfaceTile() {
         this.getProxy().setFlags(GridFlags.REQUIRE_CHANNEL);
         this.getProxy().setIdlePowerUsage(1.0);
@@ -101,12 +103,16 @@ public abstract class AbstractInterfaceTile<L extends IInterfaceLogic> extends A
 
     @Override
     public void markDirtyAndSave() {
-        this.markDirty();
-    }
+        if (this.world == null || this.world.isRemote) return;
 
-    @Override
-    public void markForNetworkUpdate() {
-        this.markForUpdate();
+        // Debounce to once per tick
+        long currentTick = this.world.getTotalWorldTime();
+        if (this.lastSaveTick == currentTick) return;
+        this.lastSaveTick = currentTick;
+
+        // Call markChunkDirty directly to flag the chunk for saving.
+        // We intentionally skip markForSave() / saveChanges() to bypass the bloat.
+        this.world.markChunkDirty(this.pos, this);
     }
 
     @Override
@@ -132,30 +138,43 @@ public abstract class AbstractInterfaceTile<L extends IInterfaceLogic> extends A
         return this.logic;
     }
 
-    public AppEngInternalInventory getUpgradeInventory() {
-        return this.logic.getUpgradeInventory();
-    }
-
     public void refreshFilterMap() {
         this.logic.refreshFilterMap();
     }
 
-    public void refreshUpgrades() {
-        this.logic.refreshUpgrades();
-    }
-
-    public boolean isValidUpgrade(ItemStack stack) {
-        return this.logic.isValidUpgrade(stack);
+    @Override
+    public long validateMaxSlotSize(long size) {
+        return this.logic.validateMaxSlotSize(size);
     }
 
     @Override
-    public int getMaxSlotSize() {
+    public long getMaxSlotSize() {
         return this.logic.getMaxSlotSize();
     }
 
     @Override
-    public void setMaxSlotSize(int size) {
-        this.logic.setMaxSlotSize(size);
+    public long setMaxSlotSize(long size) {
+        return this.logic.setMaxSlotSize(size);
+    }
+
+    @Override
+    public long getEffectiveMaxSlotSize(int slot) {
+        return this.logic.getEffectiveMaxSlotSize(slot);
+    }
+
+    @Override
+    public long setMaxSlotSizeOverride(int slot, long size) {
+        return this.logic.setMaxSlotSizeOverride(slot, size);
+    }
+
+    @Override
+    public long getMaxSlotSizeOverride(int slot) {
+        return this.logic.getMaxSlotSizeOverride(slot);
+    }
+
+    @Override
+    public void clearMaxSlotSizeOverride(int slot) {
+        this.logic.clearMaxSlotSizeOverride(slot);
     }
 
     @Override
@@ -164,16 +183,12 @@ public abstract class AbstractInterfaceTile<L extends IInterfaceLogic> extends A
     }
 
     @Override
-    public void setPollingRate(int ticks) {
-        this.logic.setPollingRate(ticks);
+    public int setPollingRate(int ticks) {
+        return this.logic.setPollingRate(ticks);
     }
 
-    public void setPollingRate(int ticks, EntityPlayer player) {
-        this.logic.setPollingRate(ticks, player);
-    }
-
-    public int getInstalledCapacityUpgrades() {
-        return this.logic.getInstalledCapacityUpgrades();
+    public int setPollingRate(int ticks, EntityPlayer player) {
+        return this.logic.setPollingRate(ticks, player);
     }
 
     public int getTotalPages() {
@@ -186,18 +201,6 @@ public abstract class AbstractInterfaceTile<L extends IInterfaceLogic> extends A
 
     public void setCurrentPage(int page) {
         this.logic.setCurrentPage(page);
-    }
-
-    public int getCurrentPageStartSlot() {
-        return this.logic.getCurrentPageStartSlot();
-    }
-
-    public boolean hasOverflowUpgrade() {
-        return this.logic.hasOverflowUpgrade();
-    }
-
-    public boolean hasTrashUnselectedUpgrade() {
-        return this.logic.hasTrashUnselectedUpgrade();
     }
 
     // ============================== IInterfaceHost implementation ==============================
@@ -269,21 +272,6 @@ public abstract class AbstractInterfaceTile<L extends IInterfaceLogic> extends A
         this.logic.uploadSettings(compound, player);
     }
 
-    @Override
-    protected boolean readFromStream(final ByteBuf data) throws IOException {
-        boolean changed = super.readFromStream(data);
-        changed |= this.logic.readStorageFromStream(data);
-        changed |= this.logic.readFiltersFromStream(data);
-        return changed;
-    }
-
-    @Override
-    protected void writeToStream(final ByteBuf data) throws IOException {
-        super.writeToStream(data);
-        this.logic.writeStorageToStream(data);
-        this.logic.writeFiltersToStream(data);
-    }
-
     @Nonnull
     @Override
     public IItemHandler getInternalInventory() {
@@ -297,8 +285,8 @@ public abstract class AbstractInterfaceTile<L extends IInterfaceLogic> extends A
      */
     @Override
     public void onChangeInventory(IItemHandler inv, int slot, InvOperation mc, ItemStack removed, ItemStack added) {
-        if (inv == this.logic.getUpgradeInventory()) this.logic.onUpgradeChanged();
-        this.markDirty();
+        this.logic.onChangeInventory(inv, slot, removed, added);
+        this.markDirtyAndSave();
     }
 
     @Override
@@ -320,6 +308,18 @@ public abstract class AbstractInterfaceTile<L extends IInterfaceLogic> extends A
 
     public DimensionalCoord getLocation() {
         return new DimensionalCoord(this);
+    }
+
+    // ============================== Grid lifecycle ==============================
+
+    @Override
+    public void onReady() {
+        super.onReady();
+
+        // Re-scan the capability cache now that all TEs are in the world and the
+        // grid proxy is ready. During readFromNBT, adjacent TEs may not have been
+        // loaded yet, leaving the push/pull card's cache empty.
+        this.logic.onGridReady();
     }
 
     // ============================== Grid events ==============================
@@ -350,6 +350,6 @@ public abstract class AbstractInterfaceTile<L extends IInterfaceLogic> extends A
     @Override
     @Nonnull
     public TickRateModulation tickingRequest(@Nonnull final IGridNode node, final int ticksSinceLastCall) {
-        return this.logic.onTick();
+        return this.logic.onTick(ticksSinceLastCall);
     }
 }

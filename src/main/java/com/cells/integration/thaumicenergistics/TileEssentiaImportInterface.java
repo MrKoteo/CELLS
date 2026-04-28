@@ -23,12 +23,9 @@ import com.cells.blocks.interfacebase.AbstractInterfaceTile;
  * Implements {@link IAspectContainer} for adjacent machines to detect essentia storage.
  * Implements {@link IEssentiaTransport} to participate in the Thaumcraft tube network.
  * <p>
- * As an <b>Import Interface</b> (SINK), this block:
- * <ul>
- *   <li>Has HIGH suction - tubes will PUSH essentia TO this block</li>
- *   <li>Accepts essentia via addToContainer() from tubes</li>
- *   <li>Does NOT provide essentia via takeFromContainer() to tubes</li>
- * </ul>
+ * NOTE: To fully work with tubes, we would need to ACTIVELY pull essentia every tick.
+ *       This is a fairly laggy thing to do, so it is not implemented.
+ *       Use the Pull Card with an Essentia Container instead.
  * <p>
  * Business logic is delegated to {@link EssentiaInterfaceLogic} to avoid code
  * duplication with part and export variants.
@@ -64,11 +61,6 @@ public class TileEssentiaImportInterface extends AbstractInterfaceTile<EssentiaI
     }
 
     @Override
-    public int insertEssentiaIntoSlot(int slot, EssentiaStack essentia) {
-        return this.logic.insertEssentiaIntoSlot(slot, essentia);
-    }
-
-    @Override
     public boolean doesContainerAccept(Aspect aspect) {
         return this.logic.doesContainerAccept(aspect);
     }
@@ -81,16 +73,6 @@ public class TileEssentiaImportInterface extends AbstractInterfaceTile<EssentiaI
     @Override
     public int addToContainer(Aspect aspect, int amount) {
         return this.logic.addToContainer(aspect, amount);
-    }
-
-    @Override
-    public int takeEssentiaAmount(Aspect aspect, int amount) {
-        return this.logic.takeEssentiaAmount(aspect, amount);
-    }
-
-    @Override
-    public int getEssentiaCount(Aspect aspect) {
-        return this.logic.getEssentiaCount(aspect);
     }
 
     // ============================== IAspectContainer Implementation ==============================
@@ -108,6 +90,7 @@ public class TileEssentiaImportInterface extends AbstractInterfaceTile<EssentiaI
     @Override
     public boolean doesContainerContain(AspectList aspects) {
         for (Aspect aspect : aspects.getAspects()) {
+            if (aspect == null) continue;
             if (!this.logic.containerContainsAny(aspect)) return false;
         }
         return true;
@@ -136,6 +119,7 @@ public class TileEssentiaImportInterface extends AbstractInterfaceTile<EssentiaI
 
     /**
      * Import interface has HIGH suction minimum - we are an essentia sink.
+     * That's the amount other blocks need to import from us.
      */
     @Override
     public int getMinimumSuction() {
@@ -192,24 +176,30 @@ public class TileEssentiaImportInterface extends AbstractInterfaceTile<EssentiaI
     }
 
     /**
-     * Return amount of the advertised essentia type.
-     * This should match what getEssentiaType() returns (first filter).
+     * Return amount of stored essentia for tube transport queries.
+     * <p>
+     * For import interfaces (sinks), this reports what we have stored.
+     * The tube network uses this along with getEssentiaType() to know what's available.
+     * Since we're a sink, this is less important than for sources.
      */
     @Override
     public int getEssentiaAmount(EnumFacing facing) {
-        Aspect type = this.logic.getSuctionType();
+        // Return amount of first stored type (if any)
+        Aspect type = this.logic.getStoredEssentiaType();
         if (type == null) return 0;
 
         return this.logic.getEssentiaCount(type);
     }
 
     /**
-     * Return the essentia type we want to receive.
-     * Import interfaces report what they want (first filter aspect).
+     * Return the stored essentia type for tube transport queries.
+     * <p>
+     * For import interfaces (sinks), this reports what we have stored.
+     * Note: This is different from getSuctionType() which indicates what we WANT.
      */
     @Override
     public Aspect getEssentiaType(EnumFacing facing) {
-        return this.logic.getSuctionType();
+        return this.logic.getStoredEssentiaType();
     }
 
     /**

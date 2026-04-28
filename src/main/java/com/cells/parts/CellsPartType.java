@@ -17,6 +17,9 @@ import appeng.api.parts.IPart;
 import appeng.util.Platform;
 
 import com.cells.Tags;
+import com.cells.config.CellsConfig;
+import com.cells.parts.subnetproxy.PartSubnetProxyBack;
+import com.cells.parts.subnetproxy.PartSubnetProxyFront;
 
 
 /**
@@ -26,7 +29,13 @@ public enum CellsPartType {
     IMPORT_INTERFACE("import_interface", PartImportInterface.class),
     FLUID_IMPORT_INTERFACE("import_fluid_interface", PartFluidImportInterface.class),
     EXPORT_INTERFACE("export_interface", PartExportInterface.class),
-    FLUID_EXPORT_INTERFACE("export_fluid_interface", PartFluidExportInterface.class);
+    FLUID_EXPORT_INTERFACE("export_fluid_interface", PartFluidExportInterface.class),
+    COMBINED_IMPORT_INTERFACE("import_combined_interface", PartCombinedImportInterface.class),
+    COMBINED_EXPORT_INTERFACE("export_combined_interface", PartCombinedExportInterface.class),
+    ITEM_IO_INTERFACE("io_item_interface", PartItemIOInterface.class),
+    FLUID_IO_INTERFACE("io_fluid_interface", PartFluidIOInterface.class),
+    SUBNET_PROXY_BACK("subnet_proxy_back", PartSubnetProxyBack.class),
+    SUBNET_PROXY_FRONT("subnet_proxy_front", PartSubnetProxyFront.class);
 
     private final String id;
     private final Class<? extends IPart> partClass;
@@ -56,16 +65,16 @@ public enum CellsPartType {
 
     @SideOnly(Side.CLIENT)
     private static ModelResourceLocation modelFromBaseName(String baseName) {
-        return new ModelResourceLocation(new ResourceLocation(Tags.MODID, "part/" + baseName), "inventory");
+        // Subnet proxy parts don't have animated textures, so they don't need the _fixed suffix
+        boolean needsFixedSuffix = CellsConfig.useFixedInterfaceTextures
+            && !baseName.startsWith("subnet_proxy");
+        String suffix = needsFixedSuffix ? "_fixed" : "";
+        return new ModelResourceLocation(new ResourceLocation(Tags.MODID, "part/" + baseName + suffix), "inventory");
     }
 
     @SideOnly(Side.CLIENT)
     private List<ModelResourceLocation> createItemModels(String baseName) {
         return ImmutableList.of(modelFromBaseName(baseName));
-    }
-
-    public String getId() {
-        return this.id;
     }
 
     public int getBaseDamage() {

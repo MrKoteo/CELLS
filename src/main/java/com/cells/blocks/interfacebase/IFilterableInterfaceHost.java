@@ -3,8 +3,6 @@ package com.cells.blocks.interfacebase;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import net.minecraft.item.ItemStack;
-
 import appeng.tile.inventory.AppEngInternalInventory;
 
 
@@ -36,24 +34,10 @@ public interface IFilterableInterfaceHost<T, K> extends IInterfaceHost {
     // ================================= Slot Information (delegated to logic) =================================
 
     /**
-     * @return Total number of filter slots available (across all pages).
-     */
-    default int getFilterSlots() {
-        return getInterfaceLogic().getFilterSlots();
-    }
-
-    /**
      * @return Number of effective filter slots based on installed capacity upgrades.
      */
     default int getEffectiveFilterSlots() {
         return getInterfaceLogic().getEffectiveFilterSlots();
-    }
-
-    /**
-     * @return Number of slots per page for pagination.
-     */
-    default int getSlotsPerPage() {
-        return getInterfaceLogic().getSlotsPerPage();
     }
 
     // ================================= Pagination (delegated to logic) =================================
@@ -111,6 +95,25 @@ public interface IFilterableInterfaceHost<T, K> extends IInterfaceHost {
      */
     boolean isStorageEmpty(int slot);
 
+    /**
+     * Get storage data as an AE stack for container-level sync.
+     * The returned stack contains resource identity AND amount.
+     *
+     * @param slot The slot index (0-based, across all pages)
+     * @return An AE stack with identity and amount, or null if the slot is empty
+     */
+    @Nullable
+    T getStorageStack(int slot);
+
+    /**
+     * Set storage from an AE stack received via container sync.
+     * Used on the client side when receiving storage updates from the server.
+     *
+     * @param slot  The slot index (0-based, across all pages)
+     * @param stack The AE stack containing identity and amount, or null to clear
+     */
+    void setStorageForClientSync(int slot, @Nullable T stack);
+
     // ================================= Key Operations =================================
 
     /**
@@ -155,16 +158,6 @@ public interface IFilterableInterfaceHost<T, K> extends IInterfaceHost {
     // ================================= Filter Modification =================================
 
     /**
-     * Add a filter to the first available slot.
-     * Respects import/export rules (import won't add to slots with non-empty storage).
-     * Does NOT check for duplicates - caller should check isInFilter first.
-     *
-     * @param stack The stack to add as a filter
-     * @return The slot index where the filter was added, or -1 if no space available
-     */
-    int addToFirstAvailableSlot(@Nonnull T stack);
-
-    /**
      * Rebuild the internal filter cache (key -> slot map).
      * Should be called after any direct filter modifications.
      */
@@ -194,41 +187,6 @@ public interface IFilterableInterfaceHost<T, K> extends IInterfaceHost {
      */
     default void refreshUpgrades() {
         getInterfaceLogic().refreshUpgrades();
-    }
-
-    /**
-     * Check if an item is a valid upgrade for this interface.
-     */
-    default boolean isValidUpgrade(ItemStack stack) {
-        return getInterfaceLogic().isValidUpgrade(stack);
-    }
-
-    /**
-     * @return Number of capacity upgrades currently installed.
-     */
-    default int getInstalledCapacityUpgrades() {
-        return getInterfaceLogic().getInstalledCapacityUpgrades();
-    }
-
-    /**
-     * @return The starting slot index for the current page.
-     */
-    default int getCurrentPageStartSlot() {
-        return getInterfaceLogic().getCurrentPageStartSlot();
-    }
-
-    /**
-     * @return true if the overflow upgrade is installed (import only).
-     */
-    default boolean hasOverflowUpgrade() {
-        return getInterfaceLogic().hasOverflowUpgrade();
-    }
-
-    /**
-     * @return true if the trash unselected upgrade is installed (import only).
-     */
-    default boolean hasTrashUnselectedUpgrade() {
-        return getInterfaceLogic().hasTrashUnselectedUpgrade();
     }
 
     // ================================= Localization =================================
