@@ -472,7 +472,7 @@ public abstract class AbstractCombinedInterfacePart extends PartBasicState
             maxTick = Math.min(maxTick, req.maxTickRate);
         }
 
-        return new TickingRequest(minTick, maxTick, primary.isSleeping, false);
+        return new TickingRequest(minTick, maxTick, primary.isSleeping, true);
     }
 
     @Override @Nonnull

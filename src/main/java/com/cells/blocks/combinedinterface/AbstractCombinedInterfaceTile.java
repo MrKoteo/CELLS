@@ -492,7 +492,7 @@ public abstract class AbstractCombinedInterfaceTile extends AENetworkInvTile
             maxTickRate = Math.min(maxTickRate, req.maxTickRate);
         }
 
-        return new TickingRequest(minTickRate, maxTickRate, primary.isSleeping, false);
+        return new TickingRequest(minTickRate, maxTickRate, primary.isSleeping, true);
     }
 
     @Override

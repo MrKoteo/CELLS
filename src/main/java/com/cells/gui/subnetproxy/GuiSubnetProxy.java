@@ -45,6 +45,7 @@ import com.cells.network.packets.PacketChangePage;
 import com.cells.network.packets.PacketChangeFilterMode;
 import com.cells.network.packets.PacketClearFilters;
 import com.cells.network.packets.PacketOpenProxyPriority;
+import com.cells.network.packets.PacketToggleProxyChannel;
 import com.cells.network.sync.PacketQuickAddFilter;
 import com.cells.network.sync.ResourceType;
 import com.cells.parts.subnetproxy.PartSubnetProxyFront;
@@ -71,6 +72,9 @@ public class GuiSubnetProxy extends AEBaseGui implements IJEIGhostIngredients {
     private GuiTabButton filterModeBtn;
     private GuiTabButton priorityBtn;
     private GuiPageNavigation pageNavigation;
+
+    /** One toggle button per available channel, stacked vertically below {@link #clearBtn}. */
+    private final List<GuiChannelToggleButton> channelButtons = new ArrayList<>();
 
     /** Tracks the last rendered filter mode ordinal for icon refresh */
     private int lastFilterMode = -1;
@@ -110,6 +114,27 @@ public class GuiSubnetProxy extends AEBaseGui implements IJEIGhostIngredients {
         // Clear filters button (left side buttons)
         this.clearBtn = new GuiImgButton(this.guiLeft - 18, this.guiTop + 8, Settings.ACTIONS, ActionItems.CLOSE);
         this.buttonList.add(this.clearBtn);
+
+        // Channel toggle buttons stacked vertically directly under the clear button.
+        // We render one per AVAILABLE ResourceType (skipping mods that aren't loaded);
+        // the part still tracks state for unavailable channels in NBT, in case the
+        // mod is added later. Default state is everything off.
+        this.channelButtons.clear();
+        ResourceType[] available = ResourceType.getAvailableTypes();
+        // Place the first toggle one row below the clear button, with a 1px gap to
+        // visually separate the toggle group from the clear action above.
+        int channelY = this.guiTop + 8 + 18 + 1;
+        for (ResourceType type : available) {
+            GuiChannelToggleButton btn = new GuiChannelToggleButton(
+                100 + type.ordinal(),
+                this.guiLeft - GuiChannelToggleButton.SIZE - 1, channelY,
+                type,
+                () -> this.container.isChannelEnabled(type)
+            );
+            this.channelButtons.add(btn);
+            this.buttonList.add(btn);
+            channelY += GuiChannelToggleButton.SIZE + 2;
+        }
 
         // Type cycling button: positioned top-right of the title
         // Uses GuiTabButton which renders an item icon with a tooltip
@@ -159,6 +184,15 @@ public class GuiSubnetProxy extends AEBaseGui implements IJEIGhostIngredients {
     public void drawFG(final int offsetX, final int offsetY, final int mouseX, final int mouseY) {
         this.fontRenderer.drawString(I18n.format("gui.cells.subnet_proxy.title"), 8, 6, 0x404040);
         this.fontRenderer.drawString(I18n.format("container.inventory"), 8, this.ySize - 96 + 3, 0x404040);
+    }
+
+    /**
+     * Used by {@link NoChannelsWarningRenderer} to decide whether to paint
+     * the warning. Exposed as a public accessor so the post-render hook can
+     * query the container without grabbing protected fields.
+     */
+    public boolean shouldShowNoChannelsWarning() {
+        return this.container.hasNoChannelsEnabled();
     }
 
     @Override
@@ -214,9 +248,9 @@ public class GuiSubnetProxy extends AEBaseGui implements IJEIGhostIngredients {
      */
     private void drawUpgradeColumns(int offsetX, int offsetY, int upgradeCount) {
         // Y offset for the column start (after the navigation header)
-        final int colY = 19;
+        final int colY = 18;
         // Bottom cap texture Y position in subnet_proxy.png
-        final int capTexY = 170;
+        final int capTexY = 169;
 
         // TODO: refactor and make more flexible
 
@@ -293,6 +327,11 @@ public class GuiSubnetProxy extends AEBaseGui implements IJEIGhostIngredients {
         } else if (btn == this.priorityBtn) {
             // Switch to AE2's priority GUI for this proxy
             CellsNetworkHandler.INSTANCE.sendToServer(new PacketOpenProxyPriority());
+        } else if (btn instanceof GuiChannelToggleButton) {
+            // Toggle the channel; the new state will arrive back via @GuiSync,
+            // so we don't need to optimistically update the local supplier.
+            CellsNetworkHandler.INSTANCE.sendToServer(
+                new PacketToggleProxyChannel(((GuiChannelToggleButton) btn).getType()));
         }
     }
 
@@ -302,7 +341,7 @@ public class GuiSubnetProxy extends AEBaseGui implements IJEIGhostIngredients {
     public List<Rectangle> getJEIExclusionArea() {
         List<Rectangle> areas = new ArrayList<>();
 
-        // Left-side buttons (clear button and any future buttons)
+        // Left-side buttons (clear button and any other buttons)
         int visibleButtons = (int) this.buttonList.stream()
             .filter(v -> v.enabled && v.x < guiLeft).count();
         if (visibleButtons > 0) {

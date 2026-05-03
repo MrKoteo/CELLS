@@ -2,6 +2,7 @@ package com.cells.gui.slots;
 
 import java.util.function.IntSupplier;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import net.minecraft.client.Minecraft;
@@ -127,5 +128,17 @@ public class ItemFilterSlot extends AbstractResourceFilterSlot<IAEItemStack> {
     public Object getIngredient() {
         IAEItemStack resource = getResource();
         return resource != null ? resource.getDefinition() : ItemStack.EMPTY;
+    }
+
+    /**
+     * Hand the underlying {@link ItemStack} to the base class so it can
+     * build a full vanilla tooltip (firing {@code ItemTooltipEvent}, which
+     * mods like JEI hook to add their own lines).
+     */
+    @Override
+    @Nullable
+    protected Object getTooltipIngredient(@Nonnull IAEItemStack resource) {
+        ItemStack stack = resource.getDefinition();
+        return stack.isEmpty() ? null : stack;
     }
 }

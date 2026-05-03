@@ -223,12 +223,17 @@ public class ContainerIOInterface extends AEBaseContainer
     // ================================= Tab Management =================================
 
     /**
-     * Switch to a different direction tab.
+     * Switch to a different direction tab (server-side).
      * Called by {@link com.cells.network.packets.PacketSwitchTab} on the server.
+     * <p>
+     * The early-return check uses the container's @GuiSync field (which is
+     * per-side, independent between client and server) rather than the host's
+     * field, so two separate container instances on the same logical side cannot
+     * race each other.
      */
     public void switchTab(int newTab) {
         if (newTab != IIOInterfaceHost.TAB_IMPORT && newTab != IIOInterfaceHost.TAB_EXPORT) return;
-        if (this.host.getActiveDirectionTab() == newTab) return;
+        if (this.activeDirectionTab == newTab) return;
 
         this.host.setActiveDirectionTab(newTab);
 
@@ -248,6 +253,41 @@ public class ContainerIOInterface extends AEBaseContainer
         this.serverStorageCache.clear();
         this.serverSizeOverrideCache.clear();
         this.maxSlotSizeOverrides.clear();
+    }
+
+    /**
+     * Client-side optimistic tab switch.
+     * <p>
+     * Updates the container's tab field, switches the upgrade inventory delegate,
+     * and ALSO updates the client-side host's {@code activeDirectionTab}. The host
+     * mutation is essential: many GUI/container paths dispatch via
+     * {@code host.getActiveLogic()} / {@code host.isExport()} (slot rendering,
+     * filter/storage sync receivers, title, controls help, polling-rate strings,
+     * etc.).
+     * <p>
+     * This is safe even in singleplayer: the integrated server's TileEntity/IPart
+     * is a distinct instance from the client's (each side has its own world), so
+     * mutating the client host does not affect the server. The server still
+     * processes its own {@link #switchTab(int)} when {@code PacketSwitchTab} arrives.
+     */
+    public void onClientTabSwitch(int newTab) {
+        if (newTab != IIOInterfaceHost.TAB_IMPORT && newTab != IIOInterfaceHost.TAB_EXPORT) return;
+        if (this.activeDirectionTab == newTab) return;
+
+        this.activeDirectionTab = newTab;
+        // Update host first so getActiveLogicUpgradeInv()/getActiveLogic() return the new tab.
+        this.host.setActiveDirectionTab(newTab);
+        this.switchableUpgradeInv.switchTo(getActiveLogicUpgradeInv());
+    }
+
+    /**
+     * @return The IItemHandler backing the upgrade slots. Reflects the
+     *         currently-active tab's upgrade inventory contents (since the
+     *         delegate is switched on tab change).
+     */
+    @Nonnull
+    public IItemHandler getUpgradeInventoryView() {
+        return this.switchableUpgradeInv;
     }
 
     // ================================= Accessors =================================

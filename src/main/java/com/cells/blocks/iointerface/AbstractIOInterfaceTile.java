@@ -135,6 +135,16 @@ public abstract class AbstractIOInterfaceTile<L extends IInterfaceLogic>
             return this.export;
         }
 
+        /**
+         * Namespace this direction's NBT keys so import and export logics (which share
+         * a single resource type and a single NBT compound) do not collide on filters,
+         * storage, max slot size, polling rate, upgrades, or per-slot overrides.
+         */
+        @Override
+        public String getNBTKeyPrefix() {
+            return this.export ? "export_" : "import_";
+        }
+
         @Override
         public void markDirtyAndSave() {
             AbstractIOInterfaceTile.this.doMarkDirtyAndSave();
@@ -311,8 +321,8 @@ public abstract class AbstractIOInterfaceTile<L extends IInterfaceLogic>
      * Read both logics from NBT. Override in subclasses if needed (e.g., isTile flag).
      */
     protected void readLogicsFromNBT(final NBTTagCompound data) {
-        // Each logic uses direction-prefixed keys (e.g., "importFilters", "exportMaxSlotSize")
-        // to avoid collisions when sharing the same compound.
+        // Each logic uses direction-prefixed keys (e.g., "import_itemFilters", "export_itemMaxSlotSize",
+        // "import_upgrades") via Host#getNBTKeyPrefix(), so import and export state never collide.
         this.importLogic.readFromNBT(data, true);
         this.exportLogic.readFromNBT(data, true);
     }
@@ -439,7 +449,7 @@ public abstract class AbstractIOInterfaceTile<L extends IInterfaceLogic>
             Math.min(importReq.minTickRate, exportReq.minTickRate),
             Math.min(importReq.maxTickRate, exportReq.maxTickRate),
             importReq.isSleeping && exportReq.isSleeping,
-            false
+            true
         );
     }
 

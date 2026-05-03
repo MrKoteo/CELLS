@@ -17,10 +17,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Add an Essentia Container Blacklist config to specify tile entities by registry ID, preventing the Essentia Interface's Push/Pull card from interacting with buggy containers.
 - Add protective checks for possible null aspects from outside mods in the Essentia Interface, to prevent crashes. This should never happen if the other mods do their job properly, but Thaumcraft addons are known to be all kinds of janky.
 - Add a toggle arrow button before the title in all Interface GUIs to show/hide the Controls Help panel. The visibility state is persisted across sessions.
+- Filter slots (Item/Fluid/Gas/Essentia interfaces and Subnet Proxy) now show the full hover tooltip of the underlying content, matching what JEI shows on hover (including lines added by other mods). Click hints are appended at the bottom. JEI is preferred when loaded; vanilla item tooltips and a display-name fallback are used otherwise.
 
 ### Fixed
 - Fix Memory Card wiping upgrades in the receiving interface when transferring data.
 - Fix Controls Help being able to go out of the screen when the screen is too small, causing a crash.
+- Fix "Add to filter" keybind not working with bookmarks from recent HEI versions.
+- Fix Combined Interfaces in Adaptive Mode not waking up when adding the first filter (e.g. on a freshly-placed Export-side IO Interface), leaving the interface idle until another network event happened.
 
 
 ## [0.5.15-beta] - 2026-04-15

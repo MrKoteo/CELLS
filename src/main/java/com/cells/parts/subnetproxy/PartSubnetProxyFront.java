@@ -3,6 +3,7 @@ package com.cells.parts.subnetproxy;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -166,6 +167,18 @@ public class PartSubnetProxyFront extends AEBasePart
      * Persisted in NBT, synced to GUI.
      */
     private FuzzyMode fuzzyMode = FuzzyMode.IGNORE_ALL;
+
+    /**
+     * Set of storage channels currently exposed by this proxy. Disabled channels
+     * are entirely hidden from the front-grid: {@link #getCellArray} returns an
+     * empty list for them, and {@link GridAListener#postChange} drops their deltas
+     * before forwarding. The default is empty (everything off) so newly placed
+     * proxies don't accidentally expose anything until the user opts in.
+     * <p>
+     * Persisted in NBT as a bitmask over {@link ResourceType#ordinal()}, synced
+     * to the GUI via the container's {@code @GuiSync} field.
+     */
+    private EnumSet<ResourceType> enabledChannels = EnumSet.noneOf(ResourceType.class);
 
     /** Client-side LED state */
     private int clientFlags = 0;
@@ -501,6 +514,41 @@ public class PartSubnetProxyFront extends AEBasePart
         this.markHostDirty();
     }
 
+    // ========================= Channel Exposure =========================
+
+    /**
+     * @return true if the given storage channel is currently exposed on the front-grid.
+     *         When false, {@link #getCellArray} returns empty and incoming deltas
+     *         are dropped (the proxy acts as if it didn't exist for that channel).
+     */
+    public boolean isChannelEnabled(ResourceType type) {
+        return this.enabledChannels.contains(type);
+    }
+
+    /** Pack the enabled-channels set into a bitmask over {@link ResourceType#ordinal()}. */
+    public int getEnabledChannelsBitmask() {
+        int mask = 0;
+        for (ResourceType t : this.enabledChannels) mask |= (1 << t.ordinal());
+        return mask;
+    }
+
+    /**
+     * Toggle whether a channel is exposed on the front-grid. Notifies the
+     * front-grid that our cell array changed so it re-discovers (or drops)
+     * the channel's contents immediately.
+     */
+    public void setChannelEnabled(ResourceType type, boolean enabled) {
+        boolean was = this.enabledChannels.contains(type);
+        if (was == enabled) return;
+
+        if (enabled) this.enabledChannels.add(type);
+        else this.enabledChannels.remove(type);
+
+        this.markHostDirty();
+        // Cell array on front-grid changed: this channel just appeared/disappeared.
+        this.notifyGridOfChange();
+    }
+
     // ========================= Config & Upgrade Access =========================
 
     public AppEngInternalInventory getConfigInventory() {
@@ -647,6 +695,16 @@ public class PartSubnetProxyFront extends AEBasePart
         this.fuzzyMode = FuzzyMode.values()[Math.max(0, Math.min(
             data.getInteger("fuzzyMode"), FuzzyMode.values().length - 1))];
         this.priority = data.getInteger("priority");
+
+        // Channel exposure bitmask. Missing key = empty set (default-off), which
+        // matches the field's default for fresh parts placed before this NBT key existed.
+        this.enabledChannels = EnumSet.noneOf(ResourceType.class);
+        if (data.hasKey("enabledChannels")) {
+            int mask = data.getInteger("enabledChannels");
+            for (ResourceType t : ResourceType.values()) {
+                if ((mask & (1 << t.ordinal())) != 0) this.enabledChannels.add(t);
+            }
+        }
         this.filtersDirty = true;
     }
 
@@ -659,10 +717,12 @@ public class PartSubnetProxyFront extends AEBasePart
         writeSparseConfig(data);
 
         this.upgrades.writeToNBT(data, "upgrades");
+        // FIXME: should we persist the current page? It's only client-side state for the GUI.
         data.setInteger("currentPage", this.currentPage);
         data.setInteger("filterMode", this.filterMode.ordinal());
         data.setInteger("fuzzyMode", this.fuzzyMode.ordinal());
         data.setInteger("priority", this.priority);
+        data.setInteger("enabledChannels", getEnabledChannelsBitmask());
     }
 
     /**
@@ -796,6 +856,15 @@ public class PartSubnetProxyFront extends AEBasePart
 
         IItemStorageChannel itemCh = AEApi.instance().storage().getStorageChannel(IItemStorageChannel.class);
         IFluidStorageChannel fluidCh = AEApi.instance().storage().getStorageChannel(IFluidStorageChannel.class);
+
+        // Channel-exposure gate: disabled channels are entirely hidden from the
+        // front-grid (no read view, no insertion). The proxy effectively does
+        // not exist on that channel until the user toggles it on. Listener-side
+        // gating in GridAListener.postChange suppresses delta forwarding too.
+        ResourceType requestedType = channelToResourceType(channel, itemCh, fluidCh);
+        if (requestedType != null && !this.enabledChannels.contains(requestedType)) {
+            return Collections.emptyList();
+        }
 
         if (channel == itemCh) {
             // Combine read-side handler with insertion handler when active.
@@ -1447,6 +1516,34 @@ public class PartSubnetProxyFront extends AEBasePart
             this.essentiaInsertionHandler, this.essentiaHandler, backStorage, this.priority);
     }
 
+    /**
+     * Map an AE2 storage channel to the {@link ResourceType} we use for the
+     * channel-exposure gate. Returns null for channels we don't manage (then
+     * the gate is bypassed and {@link #getCellArray} falls through to its
+     * default empty-list behavior at the bottom).
+     * <p>
+     * Gas/essentia checks are guarded by their integration loaders so this is
+     * safe to call when the optional mods are absent.
+     */
+    private static ResourceType channelToResourceType(
+            IStorageChannel<?> channel,
+            IItemStorageChannel itemCh,
+            IFluidStorageChannel fluidCh) {
+        if (channel == itemCh) return ResourceType.ITEM;
+        if (channel == fluidCh) return ResourceType.FLUID;
+
+        if (MekanismEnergisticsIntegration.isModLoaded()
+                && SubnetProxyGasHelper.matchesChannel(channel)) {
+            return ResourceType.GAS;
+        }
+        if (ThaumicEnergisticsIntegration.isModLoaded()
+                && SubnetProxyEssentiaHelper.matchesChannel(channel)) {
+            return ResourceType.ESSENTIA;
+        }
+
+        return null;
+    }
+
     /** Notify Grid B that our cell array has changed */
     private void notifyGridOfChange() {
         IGridNode node = this.getProxy().getNode();
@@ -1536,21 +1633,25 @@ public class PartSubnetProxyFront extends AEBasePart
                     PartSubnetProxyFront.this, eventId, origin);
 
                 if (monitor == registeredItemMonitor) {
+                    if (!enabledChannels.contains(ResourceType.ITEM)) return;
                     IStorageChannel<IAEItemStack> ch = AEApi.instance().storage()
                         .getStorageChannel(IItemStorageChannel.class);
                     forwardFilteredDeltas(change, itemHandler, ch, gridB, wrapped);
                 } else if (monitor == registeredFluidMonitor) {
+                    if (!enabledChannels.contains(ResourceType.FLUID)) return;
                     IStorageChannel<IAEFluidStack> ch = AEApi.instance().storage()
                         .getStorageChannel(IFluidStorageChannel.class);
                     forwardFilteredDeltas(change, fluidHandler, ch, gridB, wrapped);
                 } else if (gasHandler != null && MekanismEnergisticsIntegration.isModLoaded()
                            && monitor == gasHandler.getRegisteredMonitor()) {
+                    if (!enabledChannels.contains(ResourceType.GAS)) return;
                     // TODO: gas/essentia helpers still use the legacy
                     // proxySource and don't participate in cross-hub UUID
                     // dedup. Migrate them to take a wrapped source param.
                     SubnetProxyGasHelper.forwardFilteredDeltas(change, gasHandler, gridB, wrapped);
                 } else if (essentiaHandler != null && ThaumicEnergisticsIntegration.isModLoaded()
                            && monitor == essentiaHandler.getRegisteredMonitor()) {
+                    if (!enabledChannels.contains(ResourceType.ESSENTIA)) return;
                     SubnetProxyEssentiaHelper.forwardFilteredDeltas(change, essentiaHandler, gridB, wrapped);
                 }
             } catch (final GridAccessException e) {

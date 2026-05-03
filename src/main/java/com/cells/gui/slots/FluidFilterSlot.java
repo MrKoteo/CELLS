@@ -2,6 +2,7 @@ package com.cells.gui.slots;
 
 import java.util.function.IntSupplier;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import net.minecraft.client.Minecraft;
@@ -134,5 +135,16 @@ public class FluidFilterSlot extends AbstractResourceFilterSlot<IAEFluidStack> {
     public Object getIngredient() {
         IAEFluidStack fs = getResource();
         return fs == null ? null : fs.getFluidStack();
+    }
+
+    /**
+     * Hand the underlying {@link FluidStack} to the base class so it can
+     * build a full JEI-style fluid tooltip (matching what JEI shows on
+     * hover, including any lines added by other mods).
+     */
+    @Override
+    @Nullable
+    protected Object getTooltipIngredient(@Nonnull IAEFluidStack resource) {
+        return resource.getFluidStack();
     }
 }

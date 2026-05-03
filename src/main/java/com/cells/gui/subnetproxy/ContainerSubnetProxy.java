@@ -98,6 +98,14 @@ public class ContainerSubnetProxy extends AEBaseContainer implements IOptionalSl
     @GuiSync(6)
     public int hasInsertionCard = 0;
 
+    /**
+     * Bitmask of enabled channels (one bit per {@link ResourceType#ordinal()}).
+     * Synced from the part. Used by the GUI to render channel-toggle button
+     * states and to decide whether to show the "no channels enabled" warning.
+     */
+    @GuiSync(7)
+    public int enabledChannels = 0;
+
     public ContainerSubnetProxy(final InventoryPlayer ip, final PartSubnetProxyFront part) {
         super(ip, null, part);
         this.part = part;
@@ -110,6 +118,7 @@ public class ContainerSubnetProxy extends AEBaseContainer implements IOptionalSl
         this.availableUpgrades = CellsConfig.subnetProxyUpgradeSlots;
         this.priority = part.getPriority();
         this.hasInsertionCard = part.hasInsertionCard() ? 1 : 0;
+        this.enabledChannels = part.getEnabledChannelsBitmask();
 
         // Filter slots are NOT container slots. They are GUI-only widgets
         // (SubnetProxyFilterWidget) synced via PacketResourceSlot, completely
@@ -133,7 +142,7 @@ public class ContainerSubnetProxy extends AEBaseContainer implements IOptionalSl
                     upgradeInv, this,
                     slotIdx,
                     colX[col],
-                    26 + row * 18,
+                    25 + row * 18,
                     slotIdx,
                     ip
                 ).setNotDraggable());
@@ -305,6 +314,7 @@ public class ContainerSubnetProxy extends AEBaseContainer implements IOptionalSl
             this.availableUpgrades = CellsConfig.subnetProxyUpgradeSlots;
             this.priority = this.part.getPriority();
             this.hasInsertionCard = this.part.hasInsertionCard() ? 1 : 0;
+            this.enabledChannels = this.part.getEnabledChannelsBitmask();
 
             // Validate toolbox
             if (this.hasToolbox()) {
@@ -529,6 +539,16 @@ public class ContainerSubnetProxy extends AEBaseContainer implements IOptionalSl
 
     public PartSubnetProxyFront getPart() {
         return this.part;
+    }
+
+    /** True if the synced bitmask has the bit for {@code type} set. */
+    public boolean isChannelEnabled(ResourceType type) {
+        return (this.enabledChannels & (1 << type.ordinal())) != 0;
+    }
+
+    /** True if no channel is currently enabled (used to render the warning overlay). */
+    public boolean hasNoChannelsEnabled() {
+        return this.enabledChannels == 0;
     }
 
     // ========================= IQuickAddFilterContainer =========================

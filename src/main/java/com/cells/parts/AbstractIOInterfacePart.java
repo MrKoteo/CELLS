@@ -142,6 +142,16 @@ public abstract class AbstractIOInterfacePart<L extends IInterfaceLogic> extends
             return this.export;
         }
 
+        /**
+         * Namespace this direction's NBT keys so import and export logics (which share
+         * a single resource type and a single NBT compound) do not collide on filters,
+         * storage, max slot size, polling rate, upgrades, or per-slot overrides.
+         */
+        @Override
+        public String getNBTKeyPrefix() {
+            return this.export ? "export_" : "import_";
+        }
+
         @Override
         public void markDirtyAndSave() {
             AbstractIOInterfacePart.this.doMarkDirtyAndSave();
@@ -523,7 +533,7 @@ public abstract class AbstractIOInterfacePart<L extends IInterfaceLogic> extends
             Math.min(importReq.minTickRate, exportReq.minTickRate),
             Math.min(importReq.maxTickRate, exportReq.maxTickRate),
             importReq.isSleeping && exportReq.isSleeping,
-            false
+            true
         );
     }
 
