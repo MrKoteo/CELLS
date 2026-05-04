@@ -8,7 +8,18 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Semantic Versioning: https://semver.org/spec/v2.0.0.html
 
 
-## [0.6.0-alpha] - 2026-04-30
+## [0.6.0-alpha2] - 2026-05-04
+### Added
+- Add crafting recipes for the Subnet Proxy Back/Front parts, and the Insertion Card upgrade.
+
+### Fixed
+- Fix Subnet Proxy causing severe server-tick lag in chains/diamonds: back-grid cell-array updates no longer force a full re-listing of every cell handler on the front grid. Cell-array updates may be triggered by any change in the back grid (e.g., a storage bus polling, a cell going from full to non-full, etc.).
+- Fix Subnet Proxy gas/essentia deltas not participating in cross-hub UUID dedup: gas and essentia channels now use the same forwarding path as items/fluids, so chained/diamond proxy topologies dedup gas/essentia events identically.
+- Fix Subnet Proxy leaking gas/essentia listener registrations on Grid A monitors when the back grid changes or the proxy is removed.
+- Fix texture of Subnet Proxy in item form.
+
+
+## [0.6.0-alpha] - 2026-05-03
 ### Added
 - Add the Subnet Proxy (front/back), 2 parts that allow to create a unidirectional subnet (passthrough) with optional filtering. The filtering is done in pages, with each capacity card allowing for an additional page of 63 filters. All 4 types are combined in the filter, with a button to cycle which type should be encoded on drag-and-drop/shift-click/quick-add. The Subnet Proxy will only expose the content of the network it is connected to (no showing looping content). The local content is propagated to the connected network + 1 level of subnet proxies, allowing for A -> B -> A -> C -> A setups where C is aware B without looping to A.
 - Subnet Proxy Insertion Card: when installed, the proxy also forwards matching items in the reverse direction (front-grid → back-grid), letting items inserted on the front side be pushed back into the back-grid storage if they pass the filter and priority routing.

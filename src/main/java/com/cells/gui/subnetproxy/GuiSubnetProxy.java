@@ -257,8 +257,8 @@ public class GuiSubnetProxy extends AEBaseGui implements IJEIGhostIngredients {
         if (upgradeCount <= 8) {
             // Single column
             int rows = Math.min(upgradeCount, 8);
-            this.drawTexturedModalRect(offsetX + 177, offsetY + colY, 177, colY, 35, 7 + rows * 18);
-            this.drawTexturedModalRect(offsetX + 177, offsetY + colY + 7 + rows * 18, 177, capTexY, 35, 7);
+            this.drawTexturedModalRect(offsetX + 177, offsetY + colY, 177, colY, 35, 7 + rows * 18 - 1);
+            this.drawTexturedModalRect(offsetX + 177, offsetY + colY + 7 + rows * 18 - 1, 177, capTexY, 35, 7);
         } else if (upgradeCount <= 16) {
             // First column (full 8 slots)
             this.drawTexturedModalRect(offsetX + 177, offsetY + colY, 177, colY, 35, 7 + 8 * 18);
@@ -266,8 +266,8 @@ public class GuiSubnetProxy extends AEBaseGui implements IJEIGhostIngredients {
 
             // Second column (narrower, texture origin 186)
             int secondRows = upgradeCount - 8;
-            this.drawTexturedModalRect(offsetX + 177 + 27, offsetY + colY, 186, colY, 27, 7 + secondRows * 18);
-            this.drawTexturedModalRect(offsetX + 177 + 27, offsetY + colY + 7 + secondRows * 18, 186, capTexY, 27, 7);
+            this.drawTexturedModalRect(offsetX + 177 + 27, offsetY + colY, 186, colY, 27, 7 + secondRows * 18 - 1);
+            this.drawTexturedModalRect(offsetX + 177 + 27, offsetY + colY + 7 + secondRows * 18 - 1, 186, capTexY, 27, 7);
         } else {
             // First column (full 8 slots)
             this.drawTexturedModalRect(offsetX + 177, offsetY + colY, 177, colY, 35, 7 + 8 * 18);
@@ -279,8 +279,8 @@ public class GuiSubnetProxy extends AEBaseGui implements IJEIGhostIngredients {
 
             // Third column
             int thirdRows = upgradeCount - 16;
-            this.drawTexturedModalRect(offsetX + 177 + 27 + 18, offsetY + colY, 186, colY, 27, 7 + thirdRows * 18);
-            this.drawTexturedModalRect(offsetX + 177 + 27 + 18, offsetY + colY + 7 + thirdRows * 18, 186, capTexY, 27, 7);
+            this.drawTexturedModalRect(offsetX + 177 + 27 + 18, offsetY + colY, 186, colY, 27, 7 + thirdRows * 18 - 1);
+            this.drawTexturedModalRect(offsetX + 177 + 27 + 18, offsetY + colY + 7 + thirdRows * 18 - 1, 186, capTexY, 27, 7);
         }
     }
 

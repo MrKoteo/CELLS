@@ -258,13 +258,22 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
                 cell.getAvailableItems(out);
             }
         } else {
-            // Filtered: need a temporary list per cell to apply the predicate,
-            // since cells write additively into the output and we can't undo.
+            // Filtered: allocate a single reusable scratch list and clear it
+            // between cells via resetStatus(). Cells write additively, so we
+            // can't filter in-place against {@code out}; the scratch list is
+            // the minimum viable indirection. resetStatus() zeros stack sizes
+            // so AE2 will not re-iterate them.
+            IItemList<T> scratch = null;
             for (IMEInventoryHandler<T> cell : this.localCells) {
-                IItemList<T> cellItems = this.channel.createList();
-                cell.getAvailableItems(cellItems);
+                if (scratch == null) {
+                    scratch = this.channel.createList();
+                } else {
+                    scratch.resetStatus();
+                }
+                cell.getAvailableItems(scratch);
 
-                for (T item : cellItems) {
+                for (T item : scratch) {
+                    if (item.getStackSize() <= 0) continue;
                     if (this.filter.test(item)) out.add(item);
                 }
             }
