@@ -157,6 +157,15 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
         return false;
     }
 
+    /**
+     * Own local cells are only publishable when this front is the elected
+     * publisher for its back-grid on its front-grid. Without this gate,
+     * duplicate same-origin fronts can both expose the same inventory surface.
+     */
+    private boolean shouldExposeLocalCells() {
+        return this.frontPart == null || this.frontPart.shouldExposeOwnOrigin();
+    }
+
     // ========================= IMEInventory =========================
 
     @Override
@@ -185,19 +194,21 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
         // Sort by cell priority desc so AE2's per-cell priority is honored
         // even within this aggregating handler. AE2 itself extracts highest
         // priority first; we mirror that here for cells living under us.
-        for (IMEInventoryHandler<T> cell : sortedByPriorityDesc(this.localCells)) {
-            if (remaining <= 0) break;
+        if (shouldExposeLocalCells()) {
+            for (IMEInventoryHandler<T> cell : sortedByPriorityDesc(this.localCells)) {
+                if (remaining <= 0) break;
 
-            T sub = request.copy();
-            sub.setStackSize(remaining);
-            T got = cell.extractItems(sub, type, src);
-            if (got == null || got.getStackSize() <= 0) continue;
+                T sub = request.copy();
+                sub.setStackSize(remaining);
+                T got = cell.extractItems(sub, type, src);
+                if (got == null || got.getStackSize() <= 0) continue;
 
-            remaining -= got.getStackSize();
-            if (extracted == null) {
-                extracted = got;
-            } else {
-                extracted.incStackSize(got.getStackSize());
+                remaining -= got.getStackSize();
+                if (extracted == null) {
+                    extracted = got;
+                } else {
+                    extracted.incStackSize(got.getStackSize());
+                }
             }
         }
 
@@ -225,7 +236,8 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
 
     @Override
     public IItemList<T> getAvailableItems(final IItemList<T> out) {
-        // 1) Local back-grid items (always exposed, subject to filter).
+        // 1) Local back-grid items, but only when this front is the elected
+        // publisher for its own origin on the current front-grid.
         appendLocalAvailableItems(out);
 
         // 2) Peer aggregation (1-hop): for each peer front on our back-grid
@@ -248,6 +260,8 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
      * potentially loop).
      */
     public IItemList<T> appendLocalAvailableItems(final IItemList<T> out) {
+        if (!shouldExposeLocalCells()) return out;
+
         // List from local cells only (not the full monitor) to prevent subnet
         // loop inflation. Items that Grid A sees through passthrough storage buses
         // (storage bus → ME Interface) are NOT listed here, which breaks feedback
@@ -295,6 +309,7 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
      */
     public T extractFromLocalCells(final T request, final Actionable type, final IActionSource src) {
         if (request == null) return null;
+        if (!shouldExposeLocalCells()) return null;
         if (this.filter != null && !this.filter.test(request)) return null;
 
         long remaining = request.getStackSize();

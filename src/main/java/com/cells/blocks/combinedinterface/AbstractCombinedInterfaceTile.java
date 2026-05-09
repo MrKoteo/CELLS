@@ -2,6 +2,7 @@ package com.cells.blocks.combinedinterface;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 
 import javax.annotation.Nonnull;
@@ -38,10 +39,14 @@ import appeng.tile.inventory.AppEngInternalInventory;
 import appeng.util.SettingsFrom;
 import appeng.util.inv.InvOperation;
 
+import com.cells.api.IInterfaceHost;
+import com.cells.api.IInterfaceProvider;
+import com.cells.api.IUpgradeable;
 import com.cells.blocks.interfacebase.AbstractResourceInterfaceLogic;
 import com.cells.blocks.interfacebase.IInterfaceLogic;
 import com.cells.blocks.interfacebase.fluid.FluidInterfaceLogic;
 import com.cells.blocks.interfacebase.item.ItemInterfaceLogic;
+import com.cells.helpers.InterfaceApiHelper;
 import com.cells.integration.mekanismenergistics.CombinedInterfaceGasHelper;
 import com.cells.integration.mekanismenergistics.MekanismEnergisticsIntegration;
 import com.cells.integration.thaumicenergistics.CombinedInterfaceEssentiaHelper;
@@ -60,7 +65,8 @@ import com.cells.network.sync.ResourceType;
  */
 public abstract class AbstractCombinedInterfaceTile extends AENetworkInvTile
         implements IGridTickable, ICombinedInterfaceHost,
-                   ItemInterfaceLogic.Host, FluidInterfaceLogic.Host {
+           ItemInterfaceLogic.Host, FluidInterfaceLogic.Host,
+           IInterfaceProvider, IUpgradeable {
 
     protected final IActionSource actionSource;
 
@@ -173,6 +179,18 @@ public abstract class AbstractCombinedInterfaceTile extends AENetworkInvTile
     @Override
     public List<IInterfaceLogic> getAllLogics() {
         return this.allLogics;
+    }
+
+    @Override
+    @Nonnull
+    public List<IInterfaceHost> getInterfaceHosts() {
+        return InterfaceApiHelper.createInterfaceHosts(this, EnumSet.allOf(EnumFacing.class));
+    }
+
+    @Override
+    @Nonnull
+    public AppEngInternalInventory getUpgradeInventory() {
+        return this.itemLogic.getUpgradeInventory();
     }
 
     @Override

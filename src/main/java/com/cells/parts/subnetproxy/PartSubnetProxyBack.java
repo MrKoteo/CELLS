@@ -22,6 +22,8 @@ import net.minecraft.world.IBlockAccess;
 import appeng.api.AEApi;
 import appeng.api.implementations.IPowerChannelState;
 import appeng.api.networking.GridFlags;
+import appeng.api.networking.IGrid;
+import appeng.api.networking.IGridNode;
 import appeng.api.networking.events.MENetworkCellArrayUpdate;
 import appeng.api.networking.events.MENetworkChannelsChanged;
 import appeng.api.networking.events.MENetworkEventSubscribe;
@@ -30,6 +32,7 @@ import appeng.api.parts.IPartCollisionHelper;
 import appeng.api.parts.IPartHost;
 import appeng.api.parts.IPartModel;
 import appeng.api.parts.IPart;
+import appeng.api.parts.PartItemStack;
 import appeng.api.util.AECableType;
 import appeng.api.util.AEPartLocation;
 import appeng.items.parts.PartModels;
@@ -37,6 +40,7 @@ import appeng.me.GridAccessException;
 import appeng.parts.AEBasePart;
 import appeng.parts.PartModel;
 
+import com.cells.api.ISubnetProxy;
 import com.cells.Tags;
 import com.cells.parts.CellsPartType;
 import com.cells.parts.ItemCellsPart;
@@ -58,7 +62,7 @@ import com.cells.parts.ItemCellsPart;
  * insertion handler (when an Insertion Card is installed) live on
  * the front part, registered on the front's grid.
  */
-public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelState {
+public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelState, ISubnetProxy {
 
     // LED state flags (mirroring PartBasicState constants)
     protected static final int POWERED_FLAG = 1;
@@ -260,6 +264,63 @@ public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelStat
     @Override
     public float getCableConnectionLength(AECableType cable) {
         return 2;
+    }
+
+    @Override
+    public int getFilterSlots() {
+        PartSubnetProxyFront front = findFrontPart();
+        return front != null ? front.getFilterSlots() : 0;
+    }
+
+    @Override
+    @Nonnull
+    public ItemStack getFilter(int slot) {
+        PartSubnetProxyFront front = findFrontPart();
+        return front != null ? front.getFilter(slot) : ItemStack.EMPTY;
+    }
+
+    @Override
+    public void setFilter(int slot, @Nonnull ItemStack stack) {
+        PartSubnetProxyFront front = findFrontPart();
+        if (front == null) return;
+
+        front.setFilter(slot, stack);
+    }
+
+    @Override
+    public void clearFilters() {
+        PartSubnetProxyFront front = findFrontPart();
+        if (front == null) return;
+
+        front.clearFilters();
+    }
+
+    @Override
+    public boolean isOutboundConnection() {
+        return false;
+    }
+
+    @Override
+    @Nonnull
+    public EnumFacing getPrimaryFacing() {
+        return this.getSide().getFacing();
+    }
+
+    @Override
+    @Nullable
+    public IGrid getTargetGrid() {
+        PartSubnetProxyFront front = findFrontPart();
+        if (front == null) return null;
+
+        IGridNode node = front.getProxy().getNode();
+        return node != null ? node.getGrid() : null;
+    }
+
+    @Override
+    @Nonnull
+    public ItemStack getRemoteDisplayStack() {
+        PartSubnetProxyFront front = findFrontPart();
+        return front != null ? front.getItemStack(PartItemStack.PICK) : ItemStack.EMPTY;
     }
 
     // ========================= Right-click handling =========================

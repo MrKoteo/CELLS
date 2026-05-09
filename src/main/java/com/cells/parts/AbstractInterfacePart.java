@@ -42,10 +42,13 @@ import appeng.tile.inventory.AppEngInternalInventory;
 import appeng.util.SettingsFrom;
 import appeng.util.inv.InvOperation;
 
+import com.cells.api.IInterfaceProvider;
+import com.cells.api.IUpgradeable;
 import com.cells.blocks.interfacebase.AbstractResourceInterfaceLogic;
 import com.cells.blocks.interfacebase.IInterfaceHost;
 import com.cells.blocks.interfacebase.IInterfaceLogic;
 import com.cells.gui.CellsGuiHandler;
+import com.cells.helpers.InterfaceApiHelper;
 
 
 /**
@@ -72,7 +75,8 @@ import com.cells.gui.CellsGuiHandler;
  * @param <L> The logic class type (ItemInterfaceLogic, FluidInterfaceLogic, etc.)
  */
 public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends PartBasicState
-        implements IGridTickable, IInterfaceHost, AbstractResourceInterfaceLogic.Host {
+    implements IGridTickable, IInterfaceHost, AbstractResourceInterfaceLogic.Host,
+           IInterfaceProvider, IUpgradeable {
 
     protected final IActionSource actionSource;
     protected L logic;
@@ -201,6 +205,12 @@ public abstract class AbstractInterfacePart<L extends IInterfaceLogic> extends P
     @Nonnull
     public L getInterfaceLogic() {
         return this.logic;
+    }
+
+    @Override
+    @Nonnull
+    public List<com.cells.api.IInterfaceHost> getInterfaceHosts() {
+        return InterfaceApiHelper.createInterfaceHosts(this, this.logic, getTargetFacings());
     }
 
     @Override

@@ -35,8 +35,10 @@ import appeng.tile.inventory.AppEngInternalInventory;
 import appeng.util.SettingsFrom;
 import appeng.util.inv.InvOperation;
 
+import com.cells.api.IInterfaceProvider;
 import com.cells.blocks.interfacebase.AbstractResourceInterfaceLogic;
 import com.cells.blocks.interfacebase.IInterfaceLogic;
+import com.cells.helpers.InterfaceApiHelper;
 
 
 /**
@@ -59,7 +61,7 @@ import com.cells.blocks.interfacebase.IInterfaceLogic;
  * @param <L> The logic class type (ItemInterfaceLogic, FluidInterfaceLogic, etc.)
  */
 public abstract class AbstractIOInterfaceTile<L extends IInterfaceLogic>
-        extends AENetworkInvTile implements IGridTickable, IIOInterfaceHost {
+    extends AENetworkInvTile implements IGridTickable, IIOInterfaceHost, IInterfaceProvider {
 
     protected final IActionSource actionSource;
 
@@ -202,6 +204,12 @@ public abstract class AbstractIOInterfaceTile<L extends IInterfaceLogic>
     @Override
     public List<IInterfaceLogic> getAllLogics() {
         return this.allLogicsList;
+    }
+
+    @Override
+    @Nonnull
+    public List<com.cells.api.IInterfaceHost> getInterfaceHosts() {
+        return InterfaceApiHelper.createInterfaceHosts(this, EnumSet.allOf(EnumFacing.class));
     }
 
     @Override

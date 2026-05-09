@@ -62,6 +62,7 @@ final class CombinedContainerItemHelper {
                 player.inventory.setItemStack(toExtract);
                 container.sendHeldItemUpdate(player);
                 itemLogic.refreshFilterMap();
+                itemLogic.wakeUpIfAdaptive();
             }
 
             return true;
@@ -153,6 +154,7 @@ final class CombinedContainerItemHelper {
 
         if (totalTransferred > 0) {
             itemLogic.adjustSlotAmount(storageSlot, -totalTransferred);
+            itemLogic.wakeUpIfAdaptive();
         }
 
         itemLogic.refreshFilterMap();

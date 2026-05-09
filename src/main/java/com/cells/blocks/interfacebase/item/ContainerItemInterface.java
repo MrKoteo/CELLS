@@ -198,6 +198,7 @@ public class ContainerItemInterface
                 player.inventory.setItemStack(toExtract);
                 this.updateHeld(player);
                 this.host.refreshFilterMap();
+                this.host.getInterfaceLogic().wakeUpIfAdaptive();
             }
             // Import mode: can't extract, do nothing
             return true;
@@ -303,6 +304,7 @@ public class ContainerItemInterface
         // Update storage using adjustStoredAmount for proper long handling
         if (totalTransferred > 0) {
             this.host.adjustStoredAmount(storageSlot, -totalTransferred);
+            this.host.getInterfaceLogic().wakeUpIfAdaptive();
         }
 
         this.host.refreshFilterMap();

@@ -8,6 +8,15 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Semantic Versioning: https://semver.org/spec/v2.0.0.html
 
 
+## [0.6.1-alpha] - 2026-05-07
+### Added
+- Add a public API for the Subnet Proxy and Interfaces to allow other mods to interact with them without resorting to NBT manipulation or reflection.
+
+### Fixed
+- Fix rare Subnet Proxy deadlock (server tick freeze) when 2 subnet proxies published the same network event at the same time during a full re-build event.
+- (Maybe) Fix Item I/O Interface automation exposing import and export slots on top of each other, which could block pipes from extracting from the export side if it has more items than the import side.
+
+
 ## [0.6.0-alpha2] - 2026-05-04
 ### Added
 - Add crafting recipes for the Subnet Proxy Back/Front parts, and the Insertion Card upgrade.

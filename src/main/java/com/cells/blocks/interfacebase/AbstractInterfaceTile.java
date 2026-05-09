@@ -1,5 +1,6 @@
 package com.cells.blocks.interfacebase;
 
+import java.util.EnumSet;
 import java.util.List;
 
 import javax.annotation.Nonnull;
@@ -8,6 +9,7 @@ import javax.annotation.Nullable;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.EnumFacing;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import net.minecraftforge.items.IItemHandler;
@@ -30,6 +32,10 @@ import appeng.tile.grid.AENetworkInvTile;
 import appeng.tile.inventory.AppEngInternalInventory;
 import appeng.util.SettingsFrom;
 import appeng.util.inv.InvOperation;
+
+import com.cells.api.IInterfaceProvider;
+import com.cells.api.IUpgradeable;
+import com.cells.helpers.InterfaceApiHelper;
 
 
 /**
@@ -56,7 +62,8 @@ import appeng.util.inv.InvOperation;
  * @param <L> The logic class type (ItemInterfaceLogic, FluidInterfaceLogic, etc.)
  */
 public abstract class AbstractInterfaceTile<L extends IInterfaceLogic> extends AENetworkInvTile
-        implements IGridTickable, IInterfaceHost, AbstractResourceInterfaceLogic.Host {
+    implements IGridTickable, IInterfaceHost, AbstractResourceInterfaceLogic.Host,
+           IInterfaceProvider, IUpgradeable {
 
     protected final IActionSource actionSource;
     protected L logic;
@@ -136,6 +143,18 @@ public abstract class AbstractInterfaceTile<L extends IInterfaceLogic> extends A
     @Nonnull
     public L getInterfaceLogic() {
         return this.logic;
+    }
+
+    @Override
+    @Nonnull
+    public List<com.cells.api.IInterfaceHost> getInterfaceHosts() {
+        return InterfaceApiHelper.createInterfaceHosts(this, this.logic, EnumSet.allOf(EnumFacing.class));
+    }
+
+    @Override
+    @Nonnull
+    public AppEngInternalInventory getUpgradeInventory() {
+        return this.logic.getUpgradeInventory();
     }
 
     public void refreshFilterMap() {

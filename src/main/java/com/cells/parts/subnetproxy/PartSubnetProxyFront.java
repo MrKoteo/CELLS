@@ -59,6 +59,7 @@ import appeng.api.parts.IPartCollisionHelper;
 import appeng.api.parts.IPartHost;
 import appeng.api.parts.IPartModel;
 import appeng.api.parts.IPart;
+import appeng.api.parts.PartItemStack;
 import appeng.api.storage.ICellContainer;
 import appeng.api.storage.ICellInventory;
 import appeng.api.storage.ICellProvider;
@@ -91,6 +92,8 @@ import appeng.util.inv.InvOperation;
 import appeng.util.inv.filter.IAEItemFilter;
 import appeng.util.item.AEItemStack;
 
+import com.cells.api.FilterHostUtil;
+import com.cells.api.ISubnetProxy;
 import com.cells.Tags;
 import com.cells.config.CellsConfig;
 import com.cells.gui.CellsGuiHandler;
@@ -116,7 +119,8 @@ import com.cells.parts.ItemCellsPart;
  * managed here and persisted in NBT.
  */
 public class PartSubnetProxyFront extends AEBasePart
-        implements IPowerChannelState, ICellContainer, IAEAppEngInventory, IGridTickable, IPriorityHost {
+    implements IPowerChannelState, ICellContainer, IAEAppEngInventory, IGridTickable, IPriorityHost,
+           ISubnetProxy {
 
     // LED state flags
     protected static final int POWERED_FLAG = 1;
@@ -586,6 +590,40 @@ public class PartSubnetProxyFront extends AEBasePart
 
     public UpgradeInventory getUpgradeInventory() {
         return this.upgrades;
+    }
+
+    @Override
+    public int getFilterSlots() {
+        return Math.min(this.config.getSlots(), getTotalPages() * SLOTS_PER_PAGE);
+    }
+
+    @Override
+    @Nonnull
+    public ItemStack getFilter(int slot) {
+        if (slot < 0 || slot >= getFilterSlots()) return ItemStack.EMPTY;
+
+        return FilterHostUtil.normalizeFilter(this.config.getStackInSlot(slot));
+    }
+
+    @Override
+    public void setFilter(int slot, @Nonnull ItemStack stack) {
+        if (slot < 0 || slot >= getFilterSlots()) return;
+
+        this.config.setStackInSlot(slot, FilterHostUtil.normalizeFilter(stack));
+    }
+
+    @Override
+    public void clearFilters() {
+        int slotCount = getFilterSlots();
+        for (int slot = 0; slot < slotCount; slot++) {
+            this.config.setStackInSlot(slot, ItemStack.EMPTY);
+        }
+    }
+
+    @Override
+    @Nonnull
+    public EnumFacing getPrimaryFacing() {
+        return this.getSide().getFacing();
     }
 
     public int getInstalledUpgrades(Upgrades u) {
@@ -2117,6 +2155,24 @@ public class PartSubnetProxyFront extends AEBasePart
         return this.gridA;
     }
 
+    @Override
+    public boolean isOutboundConnection() {
+        return true;
+    }
+
+    @Override
+    @Nullable
+    public IGrid getTargetGrid() {
+        return this.getBackGrid();
+    }
+
+    @Override
+    @Nonnull
+    public ItemStack getRemoteDisplayStack() {
+        PartSubnetProxyBack back = findBackPart();
+        return back != null ? back.getItemStack(PartItemStack.PICK) : ItemStack.EMPTY;
+    }
+
     /**
      * @return the current exposed-origins set (own back-grid + each peer's
      *         back-grid). Read-only; do not mutate. Used by the coordinator
@@ -2124,6 +2180,41 @@ public class PartSubnetProxyFront extends AEBasePart
      */
     public Set<IGrid> getExposedOrigins() {
         return this.exposedOrigins;
+    }
+
+    /**
+     * Whether this front is currently allowed to publish its OWN back-grid on
+     * its front-grid. The election gate must apply to local listing/extract as
+     * well as peer aggregation, otherwise duplicate same-origin fronts can both
+     * expose the same inventory surface.
+     */
+    boolean shouldExposeOwnOrigin() {
+        IGrid origin = this.getBackGrid();
+        if (origin == null) return false;
+
+        IGrid frontGrid = getFrontGridLive();
+        if (frontGrid != null && origin == frontGrid) return false;
+
+        SubnetProxyGridCoordinator coord = this.currentFrontGridCoord;
+        return coord == null || coord.isElected(this, origin);
+    }
+
+    /**
+     * Election changes are structural visibility changes already handled by
+     * AE2's front-grid force-update path. Clear our snapshots so a later
+     * back-grid onListUpdate does not replay those structural changes as data
+     * deltas.
+     */
+    void onCoordinatorElectionChanged() {
+        clearPassthroughSnapshots();
+    }
+
+    @SuppressWarnings("unchecked")
+    private void clearPassthroughSnapshots() {
+        this.itemHandler.setLastSnapshot(null);
+        this.fluidHandler.setLastSnapshot(null);
+        if (this.gasHandler != null) this.gasHandler.setLastSnapshot(null);
+        if (this.essentiaHandler != null) this.essentiaHandler.setLastSnapshot(null);
     }
 
     /**
