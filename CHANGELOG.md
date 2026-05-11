@@ -11,6 +11,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ## [0.6.1-alpha2] - 2026-05-08
 ### Fixed
 - Fix WAILA/TOP status overlays showing Subnet Proxies as offline and Interface blocks with no power/channel state line.
+- Add support for shift-clicking, quick-adding, dragging from JEI, and pouring into interface slots for Recovery Containers (instead of being treated as the orb item).
 
 
 ## [0.6.1-alpha] - 2026-05-07

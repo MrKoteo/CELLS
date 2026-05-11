@@ -10,7 +10,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.util.ITooltipFlag;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.FluidUtil;
 
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.IModRegistry;
@@ -25,6 +24,7 @@ import mezz.jei.config.Constants;
 
 import com.cells.ItemRegistry;
 import com.cells.config.CellsConfig;
+import com.cells.gui.QuickAddHelper;
 import com.cells.integration.jei.cellview.CellViewCategory;
 import com.cells.integration.jei.cellview.CellViewRegistryPlugin;
 
@@ -249,7 +249,7 @@ public class CellsJEIPlugin implements IModPlugin {
 
         // Try to extract fluid from item
         if (ingredient instanceof ItemStack) {
-            return FluidUtil.getFluidContained((ItemStack) ingredient);
+            return QuickAddHelper.getFluidFromItemStack((ItemStack) ingredient);
         }
 
         return null;

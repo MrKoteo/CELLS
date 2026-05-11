@@ -352,7 +352,8 @@ public final class InterfaceApiHelper {
 
         switch (resourceType) {
             case ITEM:
-                return AEItemStack.fromItemStack(normalized);
+                ItemStack itemFilter = QuickAddHelper.getItemFromItemStack(normalized);
+                return itemFilter.isEmpty() ? null : AEItemStack.fromItemStack(itemFilter);
             case FLUID:
                 return createFluidFilterValue(normalized);
             case GAS:
@@ -372,7 +373,7 @@ public final class InterfaceApiHelper {
         }
 
         if (fluid == null) {
-            fluid = FluidUtil.getFluidContained(stack);
+            fluid = QuickAddHelper.getFluidFromItemStack(stack);
         }
 
         if (fluid == null || fluid.getFluid() == null) return null;

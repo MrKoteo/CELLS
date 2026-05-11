@@ -13,6 +13,7 @@ import appeng.api.AEApi;
 import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
 
+import com.cells.gui.QuickAddHelper;
 import com.cells.network.CellsNetworkHandler;
 import com.cells.network.sync.PacketResourceSlot;
 import com.cells.network.sync.ResourceType;
@@ -63,15 +64,15 @@ public class ItemFilterSlot extends AbstractResourceFilterSlot<IAEItemStack> {
     @Override
     @Nullable
     protected IAEItemStack extractResourceFromStack(ItemStack stack) {
-        // Convert ItemStack to IAEItemStack
-        if (stack.isEmpty()) return null;
-        return AEApi.instance().storage().getStorageChannel(IItemStorageChannel.class).createStack(stack);
+        ItemStack filterStack = QuickAddHelper.getItemFromItemStack(stack);
+        if (filterStack.isEmpty()) return null;
+
+        return AEApi.instance().storage().getStorageChannel(IItemStorageChannel.class).createStack(filterStack);
     }
 
     @Override
     protected boolean canExtractResourceFrom(ItemStack stack) {
-        // Any non-empty item can be a filter
-        return !stack.isEmpty();
+        return !QuickAddHelper.getItemFromItemStack(stack).isEmpty();
     }
 
     @Override

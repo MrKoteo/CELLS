@@ -8,12 +8,11 @@ import javax.annotation.Nullable;
 import net.minecraft.client.Minecraft;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.FluidUtil;
-import net.minecraftforge.fluids.capability.CapabilityFluidHandler;
 
 import appeng.api.storage.data.IAEFluidStack;
 import appeng.fluids.util.AEFluidStack;
 
+import com.cells.gui.QuickAddHelper;
 import com.cells.gui.ResourceRenderer;
 import com.cells.network.CellsNetworkHandler;
 import com.cells.network.sync.PacketResourceSlot;
@@ -70,13 +69,13 @@ public class FluidFilterSlot extends AbstractResourceFilterSlot<IAEFluidStack> {
     @Override
     @Nullable
     protected IAEFluidStack extractResourceFromStack(ItemStack stack) {
-        FluidStack fluid = FluidUtil.getFluidContained(stack);
+        FluidStack fluid = QuickAddHelper.getFluidFromItemStack(stack);
         return fluid != null ? AEFluidStack.fromFluidStack(fluid) : null;
     }
 
     @Override
     protected boolean canExtractResourceFrom(ItemStack stack) {
-        return stack.hasCapability(CapabilityFluidHandler.FLUID_HANDLER_ITEM_CAPABILITY, null);
+        return QuickAddHelper.getFluidFromItemStack(stack) != null;
     }
 
     @Override
