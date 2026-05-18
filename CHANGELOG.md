@@ -8,6 +8,14 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Semantic Versioning: https://semver.org/spec/v2.0.0.html
 
 
+## [0.6.1-alpha4] - 2026-05-18
+### Fixed
+- Fix Compacting Cells not properly updating the compacting chain when partitioned again in a Cell Workbench. This is a regression from a previous fix (probably 0.5.13-beta).
+
+### Changed
+- Change the Subnet Proxy's front texture to use the arrow on all sides, instead of just top.
+
+
 ## [0.6.1-alpha3] - 2026-05-17
 ### Fixed
 - Fix IO/Universal Interface not handling the Network Tool's Toolbox properly.
