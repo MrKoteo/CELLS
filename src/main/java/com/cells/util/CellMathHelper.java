@@ -154,6 +154,28 @@ public final class CellMathHelper {
     }
 
     /**
+     * Rescales stored base units when a compacting chain changes base tier.
+     * <p>
+     * The old and new rates must be for the same anchor tier in the old and new chain,
+     * typically the partitioned item's tier. When the new base unit is coarser than the
+     * old one, any remainder smaller than the new base unit is truncated because the
+     * shallower chain cannot represent it.
+     * </p>
+     *
+     * @param baseUnits     The stored amount in the old chain's base units
+     * @param oldAnchorRate The old chain rate for the shared anchor tier
+     * @param newAnchorRate The new chain rate for the shared anchor tier
+     * @return The stored amount converted to the new chain's base units
+     */
+    public static long rescaleBaseUnits(long baseUnits, long oldAnchorRate, long newAnchorRate) {
+        if (baseUnits <= 0) return 0;
+        if (oldAnchorRate <= 0 || newAnchorRate <= 0) return baseUnits;
+        if (oldAnchorRate == newAnchorRate) return baseUnits;
+
+        return multiplyThenDivide(baseUnits, newAnchorRate, 1, oldAnchorRate);
+    }
+
+    /**
      * Compares two ItemStacks for equality (item, metadata, and NBT).
      *
      * @param a First stack

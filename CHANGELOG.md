@@ -8,6 +8,11 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Semantic Versioning: https://semver.org/spec/v2.0.0.html
 
 
+## [0.6.2-alpha2] - 2026-05-26
+### Fixed
+- Fix Compacting Cells preserving the raw stored base-unit count when a tier card rebuild changes the chain depth, which caused decompression cards to show too few items after being added to a non-empty cell.
+
+
 ## [0.6.2-alpha] - 2026-05-22
 ### Added
 - Add a storage-cell component swap recipe that converts one CELLS cell into another CELLS cell family while returning the replaced component, and rejects swaps that would lose contents or leave incompatible upgrades installed.

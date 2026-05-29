@@ -277,6 +277,13 @@ public class HyperDensityCompactingCellInventory implements ICellInventory<IAEIt
     private long cachedMaxCapacityInBaseUnits = -1;
 
     /**
+     * Main-tier conversion rate from the chain before a pending tier-card rebuild.
+     * Used to translate storedBaseUnits when the rebuilt chain exposes a different
+     * lowest tier.
+     */
+    private long pendingTierRebuildMainRate = 0;
+
+    /**
      * Set by getSlotForItem() to indicate whether the last match was a direct proto match
      * (true) or an ore dict equivalent match (false). Read by injectItems() to avoid the
      * redundant isDirectMatch() call that would repeat the same areItemsEqual comparison.
@@ -411,6 +418,12 @@ public class HyperDensityCompactingCellInventory implements ICellInventory<IAEIt
         }
 
         return newTiersUp != cachedTiersUp || newTiersDown != cachedTiersDown;
+    }
+
+    private long getMainTierRate() {
+        if (mainTier < 0 || mainTier >= convRate.length) return 0;
+
+        return convRate[mainTier];
     }
 
     /**
@@ -988,6 +1001,7 @@ public class HyperDensityCompactingCellInventory implements ICellInventory<IAEIt
             int newMaxTiers = newTiersUp + 1 + newTiersDown;
 
             // Save current data
+            long previousMainTierRate = getMainTierRate();
             long savedBaseUnits = storedBaseUnits;
             ItemStack savedPartition = cachedPartitionItem.copy();
 
@@ -996,6 +1010,7 @@ public class HyperDensityCompactingCellInventory implements ICellInventory<IAEIt
             initializeArrays();
             storedBaseUnits = savedBaseUnits;
             cachedPartitionItem = savedPartition;
+            pendingTierRebuildMainRate = previousMainTierRate;
 
             // Mark chain for rebuild - mainTier = -1 signals that chain needs rebuilding
             // The actual rebuild happens in updateCompressionChainIfNeeded() with World access
@@ -1197,11 +1212,13 @@ public class HyperDensityCompactingCellInventory implements ICellInventory<IAEIt
         if (needsTierRebuild) {
             // Save the base units
             long savedBaseUnits = storedBaseUnits;
+            long previousMainTierRate = pendingTierRebuildMainRate;
 
             // Rebuild chain with new tier configuration
             reset();
-            storedBaseUnits = savedBaseUnits;
             initializeCompressionChain(cachedPartitionItem, world);
+            storedBaseUnits = CellMathHelper.rescaleBaseUnits(savedBaseUnits, previousMainTierRate, getMainTierRate());
+            pendingTierRebuildMainRate = 0;
             chainFullyInitialized = mainTier >= 0 && !cachedChainEmpty;
             saveChanges();
 
@@ -1564,6 +1581,7 @@ public class HyperDensityCompactingCellInventory implements ICellInventory<IAEIt
         storedBaseUnits = 0;
         mainTier = -1;
         chainFullyInitialized = false;
+        pendingTierRebuildMainRate = 0;
 
         // Invalidate derived caches
         cachedChainEmpty = true;
