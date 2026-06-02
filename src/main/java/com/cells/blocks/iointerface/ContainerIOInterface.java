@@ -1,6 +1,7 @@
 package com.cells.blocks.iointerface;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.annotation.Nonnull;
@@ -671,6 +672,26 @@ public class ContainerIOInterface extends AEBaseContainer
         return true;
     }
 
+    @SuppressWarnings("rawtypes")
+    public void addRecipeTransferSilently(@Nonnull Map<Integer, List<Object>> resourcesByTab) {
+        for (Map.Entry<Integer, List<Object>> entry : resourcesByTab.entrySet()) {
+            int targetTab = entry.getKey();
+            IInterfaceLogic logic = this.host.getLogicForTab(targetTab);
+            if (!(logic instanceof IResourceInterfaceLogic)) continue;
+
+            IResourceInterfaceLogic rawLogic = (IResourceInterfaceLogic) logic;
+            boolean changed = false;
+            boolean isExport = targetTab == IIOInterfaceHost.TAB_EXPORT;
+
+            for (Object resource : entry.getValue()) {
+                if (!tryAddToFilter(rawLogic, logic, resource, isExport)) continue;
+                changed = true;
+            }
+
+            if (changed) logic.refreshFilterMap();
+        }
+    }
+
     @Override
     public String getTypeLocalizationKey() {
         return "cells.type." + this.host.getResourceType().name().toLowerCase();
@@ -678,7 +699,12 @@ public class ContainerIOInterface extends AEBaseContainer
 
     @SuppressWarnings("rawtypes")
     private int findFirstAvailableSlot(IResourceInterfaceLogic rawLogic, boolean isExport) {
-        final int effectiveSlots = getActiveLogic().getEffectiveFilterSlots();
+        return findFirstAvailableSlot(getActiveLogic(), rawLogic, isExport);
+    }
+
+    @SuppressWarnings("rawtypes")
+    private int findFirstAvailableSlot(IInterfaceLogic logic, IResourceInterfaceLogic rawLogic, boolean isExport) {
+        final int effectiveSlots = logic.getEffectiveFilterSlots();
 
         for (int i = 0; i < effectiveSlots; i++) {
             Object existing = rawLogic.getFilter(i);
@@ -688,6 +714,34 @@ public class ContainerIOInterface extends AEBaseContainer
         }
 
         return -1;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private boolean tryAddToFilter(
+            IResourceInterfaceLogic rawLogic,
+            IInterfaceLogic logic,
+            Object resource,
+            boolean isExport) {
+        if (resource == null) return false;
+        if (containsResource(rawLogic, logic, resource)) return false;
+
+        int slot = findFirstAvailableSlot(logic, rawLogic, isExport);
+        if (slot < 0) return false;
+
+        rawLogic.setFilter(slot, resource);
+        return true;
+    }
+
+    @SuppressWarnings("rawtypes")
+    private boolean containsResource(IResourceInterfaceLogic rawLogic, IInterfaceLogic logic, Object resource) {
+        final int effectiveSlots = logic.getEffectiveFilterSlots();
+
+        for (int i = 0; i < effectiveSlots; i++) {
+            Object existing = rawLogic.getFilter(i);
+            if (existing != null && existing.equals(resource)) return true;
+        }
+
+        return false;
     }
 
     // ================================= Storage Interaction =================================

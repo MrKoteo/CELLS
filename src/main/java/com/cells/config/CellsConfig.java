@@ -132,6 +132,9 @@ public class CellsConfig {
     /** Whether the controls help panel is visible in Interface GUIs. Persisted as a hidden config. */
     public static boolean showControlsHelp = false;
 
+    /** Whether JEI recipe transfer sends recipe inputs to Export interfaces and outputs to Import interfaces, or the opposite */
+    public static boolean jeiTransferInputsToExport = true;
+
     /** Number of upgrade slots for the Subnet Proxy (1-24) */
     public static int subnetProxyUpgradeSlots = 5;
 
@@ -463,6 +466,10 @@ public class CellsConfig {
             "Whether the controls help panel is visible in Interface GUIs.");
         showControlsHelp = p.getBoolean();
 
+        p = config.get(CATEGORY_HIDDEN, "jeiTransferInputsToExport", true,
+            "Whether JEI recipe transfer sends recipe inputs to Export interfaces and outputs to Import interfaces, or the opposite.");
+        jeiTransferInputsToExport = p.getBoolean();
+
         // Save if config was created or changed
         if (config.hasChanged()) config.save();
     }
@@ -476,6 +483,24 @@ public class CellsConfig {
     public static void setShowControlsHelp(boolean value) {
         showControlsHelp = value;
         config.get(CATEGORY_HIDDEN, "showControlsHelp", false).set(value);
+        config.save();
+    }
+
+    /**
+     * Whether the given interface direction should receive JEI recipe inputs.
+     * Export uses the shared preference directly and Import receives the opposite side.
+     */
+    public static boolean interfaceReceivesJeiInputs(boolean isExportInterface) {
+        return isExportInterface ? jeiTransferInputsToExport : !jeiTransferInputsToExport;
+    }
+
+    /**
+     * Persist the shared JEI routing preference to the hidden config category.
+     * Must be called from the client side only.
+     */
+    public static void setJeiTransferInputsToExport(boolean value) {
+        jeiTransferInputsToExport = value;
+        config.get(CATEGORY_HIDDEN, "jeiTransferInputsToExport", true).set(value);
         config.save();
     }
 

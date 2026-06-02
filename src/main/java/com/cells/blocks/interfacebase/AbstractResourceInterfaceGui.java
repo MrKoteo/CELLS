@@ -40,6 +40,7 @@ import com.cells.gui.GuiClearFiltersButton;
 import com.cells.gui.GuiControlsHelpToggleButton;
 import com.cells.gui.GuiPageNavigation;
 import com.cells.gui.GuiPullPushUpgradeButton;
+import com.cells.gui.GuiRecipeTransferDirectionButton;
 import com.cells.gui.ImportInterfaceControlsHelper;
 import com.cells.gui.IToolboxContainer;
 import com.cells.gui.slots.AbstractResourceFilterSlot;
@@ -64,6 +65,7 @@ import com.cells.util.PollingRateUtils;
  *   <li>Config button (max slot size)</li>
  *   <li>Polling rate button</li>
  *   <li>Clear filters button</li>
+ *   <li>JEI recipe transfer routing toggle</li>
  *   <li>Page navigation (for capacity cards)</li>
  *   <li>Controls help widget</li>
  *   <li>JEI ghost ingredient framework</li>
@@ -102,6 +104,7 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
     private GuiPageNavigation pageNavigation;
     private GuiPullPushUpgradeButton pullPushButton;
     private GuiControlsHelpToggleButton controlsToggleButton;
+    private GuiRecipeTransferDirectionButton recipeTransferDirectionButton;
 
     // JEI ghost target mapping
     protected final Map<Object, Object> mapTargetSlot = new HashMap<>();
@@ -262,6 +265,30 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
         return false;
     }
 
+    /**
+     * Build the shared JEI transfer routing tooltip shown in every interface GUI.
+     */
+    protected String getRecipeTransferButtonTooltip() {
+        String importDir = CellsConfig.jeiTransferInputsToExport ? "outputs" : "inputs";
+        String exportDir = CellsConfig.jeiTransferInputsToExport ? "inputs" : "outputs";
+        String importInterfaceTarget = I18n.format("cells.recipe_component." + importDir);
+        String exportInterfaceTarget = I18n.format("cells.recipe_component." + exportDir);
+
+        // Indicate which interface is currently active
+        String activeCurrent = I18n.format("tooltip.cells.recipe_transfer.current");
+        if (this.isActiveTabExport()) {
+            exportInterfaceTarget += activeCurrent;
+        } else {
+            importInterfaceTarget += activeCurrent;
+        }
+
+        return I18n.format("tooltip.cells.recipe_transfer.title") + "\n\n"
+            + I18n.format("tooltip.cells.recipe_transfer.mapping1", importInterfaceTarget) + "\n"
+            + I18n.format("tooltip.cells.recipe_transfer.mapping2", exportInterfaceTarget) + "\n"
+            + "\n"
+            + I18n.format("tooltip.cells.recipe_transfer.click_to_swap");
+    }
+
     // ============================== Common implementation ==============================
 
     @Override
@@ -317,6 +344,16 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
                 : I18n.format("tooltip.cells.controls_help.show")
         );
         this.buttonList.add(this.controlsToggleButton);
+
+        // Toggle button to swap whether Import or Export interfaces receive recipe inputs.
+        this.recipeTransferDirectionButton = new GuiRecipeTransferDirectionButton(
+            6,
+            this.guiLeft + 182,
+            this.guiTop + 135,
+            () -> CellsConfig.jeiTransferInputsToExport,
+            this::getRecipeTransferButtonTooltip
+        );
+        this.buttonList.add(this.recipeTransferDirectionButton);
 
         // Config button to open max slot size configuration screen
         // Unit is resolved dynamically to allow for dynamic type
@@ -462,6 +499,11 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
     @Override
     protected void actionPerformed(@Nonnull final GuiButton btn) throws IOException {
         super.actionPerformed(btn);
+
+        if (btn == this.recipeTransferDirectionButton) {
+            CellsConfig.setJeiTransferInputsToExport(!CellsConfig.jeiTransferInputsToExport);
+            return;
+        }
 
         BlockPos pos = this.host.getHostPos();
 
@@ -679,7 +721,7 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
     /**
      * Returns whether the currently-active tab is the export direction.
      * <p>
-     * For {@link IIOInterfaceHost} we trust the container's @GuiSync tab field
+     * For {@link IIOInterfaceHost} we trust the container's {@code @GuiSync} tab field
      * (kept in sync with the server and updated optimistically on client-side
      * tab clicks) rather than {@code host.isExport()}, which goes through
      * {@code host.getActiveDirectionTab()} and may be stale on the client.

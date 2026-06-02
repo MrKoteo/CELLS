@@ -10,6 +10,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.util.ITooltipFlag;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fluids.FluidStack;
+import net.minecraftforge.fml.common.Optional;
 
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.IModRegistry;
@@ -23,10 +24,16 @@ import mezz.jei.api.recipe.IRecipeCategoryRegistration;
 import mezz.jei.config.Constants;
 
 import com.cells.ItemRegistry;
+import com.cells.blocks.combinedinterface.ContainerCombinedInterface;
+import com.cells.blocks.interfacebase.fluid.ContainerFluidInterface;
+import com.cells.blocks.interfacebase.item.ContainerItemInterface;
+import com.cells.blocks.iointerface.ContainerIOInterface;
 import com.cells.config.CellsConfig;
 import com.cells.gui.QuickAddHelper;
+import com.cells.integration.jei.InterfaceRecipeTransferHandler.TransferMode;
 import com.cells.integration.jei.cellview.CellViewCategory;
 import com.cells.integration.jei.cellview.CellViewRegistryPlugin;
+import com.cells.network.sync.ResourceType;
 
 
 /**
@@ -77,6 +84,8 @@ public class CellsJEIPlugin implements IModPlugin {
         // Register cell view feature
         if (enableCellView) registry.addRecipeRegistryPlugin(new CellViewRegistryPlugin());
 
+        registerInterfaceRecipeTransferHandlers(registry);
+
         // Register Subnet Proxy recipe transfer handler (universal: works with any recipe category)
         SubnetProxyRecipeTransferHandler transferHandler = new SubnetProxyRecipeTransferHandler();
         registry.getRecipeTransferRegistry().addRecipeTransferHandler(
@@ -86,6 +95,42 @@ public class CellsJEIPlugin implements IModPlugin {
     @Override
     public void onRuntimeAvailable(@Nonnull IJeiRuntime runtime) {
         jeiRuntime = runtime;
+    }
+
+    private void registerInterfaceRecipeTransferHandlers(@Nonnull IModRegistry registry) {
+        registry.getRecipeTransferRegistry().addRecipeTransferHandler(
+            new InterfaceRecipeTransferHandler<>(ContainerItemInterface.class, TransferMode.SINGLE_DIRECTION),
+            Constants.UNIVERSAL_RECIPE_TRANSFER_UID);
+        registry.getRecipeTransferRegistry().addRecipeTransferHandler(
+            new InterfaceRecipeTransferHandler<>(ContainerFluidInterface.class, TransferMode.SINGLE_DIRECTION),
+            Constants.UNIVERSAL_RECIPE_TRANSFER_UID);
+        registry.getRecipeTransferRegistry().addRecipeTransferHandler(
+            new InterfaceRecipeTransferHandler<>(ContainerCombinedInterface.class, TransferMode.COMBINED_ALL_TYPES),
+            Constants.UNIVERSAL_RECIPE_TRANSFER_UID);
+        registry.getRecipeTransferRegistry().addRecipeTransferHandler(
+            new InterfaceRecipeTransferHandler<>(ContainerIOInterface.class, TransferMode.IO_SPLIT_DIRECTIONS),
+            Constants.UNIVERSAL_RECIPE_TRANSFER_UID);
+
+        if (ResourceType.GAS.isAvailable()) registerGasInterfaceTransferHandler(registry);
+        if (ResourceType.ESSENTIA.isAvailable()) registerEssentiaInterfaceTransferHandler(registry);
+    }
+
+    @Optional.Method(modid = "mekeng")
+    private void registerGasInterfaceTransferHandler(@Nonnull IModRegistry registry) {
+        registry.getRecipeTransferRegistry().addRecipeTransferHandler(
+            new InterfaceRecipeTransferHandler<>(
+                com.cells.integration.mekanismenergistics.ContainerGasInterface.class,
+                TransferMode.SINGLE_DIRECTION),
+            Constants.UNIVERSAL_RECIPE_TRANSFER_UID);
+    }
+
+    @Optional.Method(modid = "thaumicenergistics")
+    private void registerEssentiaInterfaceTransferHandler(@Nonnull IModRegistry registry) {
+        registry.getRecipeTransferRegistry().addRecipeTransferHandler(
+            new InterfaceRecipeTransferHandler<>(
+                com.cells.integration.thaumicenergistics.ContainerEssentiaInterface.class,
+                TransferMode.SINGLE_DIRECTION),
+            Constants.UNIVERSAL_RECIPE_TRANSFER_UID);
     }
 
     /**

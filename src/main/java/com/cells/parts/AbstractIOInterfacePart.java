@@ -40,7 +40,6 @@ import appeng.me.helpers.AENetworkProxy;
 import appeng.me.helpers.MachineSource;
 import appeng.parts.PartBasicState;
 import appeng.parts.PartModel;
-import appeng.tile.inventory.AppEngInternalInventory;
 import appeng.util.SettingsFrom;
 import appeng.util.inv.IAEAppEngInventory;
 import appeng.util.inv.InvOperation;

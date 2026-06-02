@@ -70,6 +70,13 @@ tooltip.cells.clear_filters.all=Clear all filter slots
 # Controls help toggle button
 tooltip.cells.controls_help.show=Show Controls Help
 tooltip.cells.controls_help.hide=Hide Controls Help
+tooltip.cells.recipe_transfer.title=JEI Recipe Transfer
+tooltip.cells.recipe_transfer.mapping1=Import Interface -> %s
+tooltip.cells.recipe_transfer.mapping2=Export Interface -> %s
+tooltip.cells.recipe_transfer.current= §a(You are here)§r
+tooltip.cells.recipe_transfer.click_to_swap=Decides which part of a recipe goes into the filters when clicking '+' in JEI, depending on the interface type. Click to swap interface routing.
+cells.recipe_component.inputs=JEI §bInputs§r
+cells.recipe_component.outputs=JEI §bOutputs§r
 
 # Messages
 message.cells.disassemble_fail_content=Cannot disassemble cell with content! Empty the cell first.
