@@ -18,6 +18,7 @@ The mod requires AE2-UEL. It also has support for:
 - JEI: Import Interface drag-and-drop and quick-add features, Creative Cell drag-and-drop feature, and JEI Cell Preview feature
 - Thaumic Energistics: Configurable Cell components
 - Mekanism Energistics: Configurable Cell components
+- ProjectEX: EMC Cell
 
 ### Why such heavy warnings on increasing number of types?
 Because of limitations in Minecraft and AE2 :
@@ -155,6 +156,11 @@ registry_name@metadata = bytes,channel,tier_name
 - `tier_name`: Used for texture selection (e.g. `1k`, `64k`, `1g`)
 
 
+### EMC Cell
+A cell that acts like a Personal EMC Link from ProjectEX, allowing you to convert items to EMC and back. It is the strict equivalent of configured Storage Bus on an EMC Link, allowing in only the items that are whitelisted in the filter, but not with strict matching. The matching rules are the same as the ones for other ProjectEx blocks.
+To spare performance, accumulated EMC is only flushed to the player's network once a second (configurable).
+
+
 ### Upgrades
 
 #### Void Overflow Card
@@ -231,6 +237,14 @@ Install in a Compacting Cell's upgrade slots to increase the number of compressi
 - **15x Card**: Allows compressing/decompressing up to 15 tiers
 
 **Compatible with**: Compacting Cells
+
+
+#### Refined/Compressed EMC Cards
+Install in an EMC Cell to increase the number of partition slots the cell can hold, in the same way as the Personal/Refined/Compressed EMC Links. The number of slots is configurable per card in the config, and you can even add more cards with a possibly infinite number of slots by adding custom entries in the config file, but you will need to provide textures and localization for them yourself. The first value in the config entry is the default number of slots without card.
+- **Refined EMC Card**: 9 slots by default
+- **Compressed EMC Card**: 54 slots by default
+
+**Compatible with**: EMC Cell
 
 
 ## Configuration

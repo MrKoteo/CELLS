@@ -1,0 +1,21 @@
+{
+  "type": "forge:ore_shapeless",
+  "conditions": [
+    {
+      "type": "forge:mod_loaded",
+      "modid": "projectex"
+    }
+  ],
+  "ingredients": [
+    {
+      "type": "appliedenergistics2:part",
+      "part": "material.empty_storage_cell"
+    },
+    {
+      "item": "projectex:personal_link"
+    }
+  ],
+  "result": {
+    "item": "cells:emc_cell"
+  }
+}

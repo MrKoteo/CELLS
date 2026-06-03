@@ -9,6 +9,7 @@ tooltip.cells.type.hyperdensity=Hyper-Density ME Storage Cell
 tooltip.cells.type.hyperdensity_compact=Hyper-Density ME Compacting Cell
 tooltip.cells.type.import_interface=Import Interface (all types)
 tooltip.cells.type.export_interface=Export Interface (all types)
+tooltip.cells.type.emc=EMC Cell
 tooltip.cells.nbt_size=NBT Size: %s
 tooltip.cells.nbt_size.warning=§c⚠ NBT size exceeds safe limit! This may cause lag or crashes. Move some NBT-heavy content to another chunk and network to avoid corruption.§r
 tooltip.cells.previous_page=Previous page
@@ -129,6 +130,10 @@ cells.config.hdFluidCellUpgradeSlots=HD Fluid Cells Upgrade Slots
 cells.config.hdFluidCellUpgradeSlots.tooltip=Number of upgrade slots for hyper-density fluid cells (1-16)
 cells.config.configurableCellUpgradeSlots=Configurable Cells Upgrade Slots
 cells.config.configurableCellUpgradeSlots.tooltip=Number of upgrade slots for configurable cells (1-16)
+cells.config.emcCellSyncIntervalTicks=EMC Cell Sync Interval
+cells.config.emcCellSyncIntervalTicks.tooltip=Server tick interval between buffered EMC flushes to the bound player/team EMC pool (1-72000)
+cells.config.emcCellPartitionSlots=EMC Cell Partition Slots
+cells.config.emcCellPartitionSlots.tooltip=Unlocked partition slots for EMC cell tiers. Index 0 is the base cell with no upgrade. Each following value applies to EMC Upgrade 1, EMC Upgrade 2, and so on.
 
 ## Config: Misc
 cells.config.enableEssentiaCreativeCellFix=Enable Essentia Creative Cell Fix
@@ -237,6 +242,20 @@ item.cells.decompression_tier_card.9x.name=Decompression Tier Card (9x)
 item.cells.decompression_tier_card.12x.name=Decompression Tier Card (12x)
 item.cells.decompression_tier_card.15x.name=Decompression Tier Card (15x)
 tooltip.cells.decompression_tier_card.desc=Enables up to %d decompression tiers. For best performance, use the lowest tier you can.
+
+# EMC Cell
+item.cells.emc_cell.name=EMC ME Storage Cell
+item.cells.emc_capacity_card.tier1.name=Refined EMC Upgrade
+item.cells.emc_capacity_card.tier2.name=Compressed EMC Upgrade
+tooltip.cells.emc_cell.info=Bound EMC storage cell. Exposes learned partition items at a fixed count and converts accepted inserts into EMC.
+tooltip.cells.emc_cell.slots=Partition slots: %s
+tooltip.cells.emc_cell.owner=Bound to: %s
+tooltip.cells.emc_cell.unbound=Unbound: re-insert it to bind it to a player
+tooltip.cells.emc_cell.buffered=Buffered EMC: %s
+tooltip.cells.emc_cell.unlearned=Unlearned partition filters: %s
+tooltip.cells.emc_cell.unlearned_hint=Hold Shift to list blocked filters
+tooltip.cells.emc_capacity_card.desc=Allows the Cell to provide %s different partitioned items
+
 
 # Hyper-Density Cells (1k-1G max, each displayed byte represents ~2.1B actual storage)
 item.cells.hyper_density_cell.1k.name=1k Hyper-Density ME Storage Cell

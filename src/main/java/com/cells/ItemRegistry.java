@@ -22,6 +22,7 @@ import com.cells.cells.configurable.ComponentInfo;
 import com.cells.cells.configurable.ItemConfigurableCell;
 import com.cells.cells.creative.item.ItemCreativeCell;
 import com.cells.cells.creative.fluid.ItemCreativeFluidCell;
+import com.cells.cells.emc.ItemEmcCell;
 import com.cells.cells.hyperdensity.compacting.ItemHyperDensityCompactingCell;
 import com.cells.cells.hyperdensity.compacting.ItemHyperDensityCompactingComponent;
 import com.cells.cells.hyperdensity.item.ItemHyperDensityCell;
@@ -33,6 +34,7 @@ import com.cells.cells.normal.compacting.ItemCompactingComponent;
 import com.cells.client.CellTextureColors;
 import com.cells.config.CellsConfig;
 import com.cells.integration.mekanismenergistics.MekanismEnergisticsIntegration;
+import com.cells.integration.projectex.ProjectEXIntegration;
 import com.cells.integration.thaumicenergistics.ThaumicEnergisticsIntegration;
 import com.cells.items.ItemCompressedCalculationPrint;
 import com.cells.items.ItemCompressedEngineeringPrint;
@@ -50,6 +52,7 @@ import com.cells.items.ItemTrashUnselectedCard;
 import com.cells.items.ItemAutoPullCard;
 import com.cells.items.ItemAutoPushCard;
 import com.cells.items.ItemInsertionCard;
+import com.cells.items.ItemEmcCapacityCard;
 import com.cells.recipes.CellComponentSwapRecipe;
 import com.cells.recipes.ConfigurableCellAssemblyRecipe;
 
@@ -67,9 +70,11 @@ public class ItemRegistry {
     public static ItemConfigurableCell CONFIGURABLE_CELL;
     public static ItemCreativeCell CREATIVE_CELL;
     public static ItemCreativeFluidCell CREATIVE_FLUID_CELL;
+    public static ItemEmcCell EMC_CELL;
     // Optional creative cells - only non-null if the integration mod is loaded
     public static Item CREATIVE_GAS_CELL;
     public static Item CREATIVE_ESSENTIA_CELL;
+    public static ItemEmcCapacityCard EMC_CAPACITY_CARD;
     public static ItemOverflowCard OVERFLOW_CARD;
     public static ItemOreDictCard OREDICT_CARD;
     public static ItemTrashUnselectedCard TRASH_UNSELECTED_CARD;
@@ -114,6 +119,11 @@ public class ItemRegistry {
         // Creative cells are always available (no config toggle)
         CREATIVE_CELL = new ItemCreativeCell();
         CREATIVE_FLUID_CELL = new ItemCreativeFluidCell();
+
+        if (ProjectEXIntegration.isModLoaded()) {
+            EMC_CELL = new ItemEmcCell();
+            EMC_CAPACITY_CARD = new ItemEmcCapacityCard();
+        }
 
         // Optional creative cells for mod integrations
         if (MekanismEnergisticsIntegration.isModLoaded()) {
@@ -173,6 +183,9 @@ public class ItemRegistry {
         // Creative cells are always registered
         event.getRegistry().register(CREATIVE_CELL);
         event.getRegistry().register(CREATIVE_FLUID_CELL);
+
+        if (EMC_CELL != null) event.getRegistry().register(EMC_CELL);
+        if (EMC_CAPACITY_CARD != null) event.getRegistry().register(EMC_CAPACITY_CARD);
 
         // Optional creative cells (if mods are loaded)
         if (CREATIVE_GAS_CELL != null) event.getRegistry().register(CREATIVE_GAS_CELL);
@@ -366,6 +379,20 @@ public class ItemRegistry {
             makeModelLocation(CREATIVE_CELL, "cells/creative"));
         ModelLoader.setCustomModelResourceLocation(CREATIVE_FLUID_CELL, 0,
             makeModelLocation(CREATIVE_FLUID_CELL, "cells/creative"));
+
+        if (EMC_CELL != null) {
+            ModelLoader.setCustomModelResourceLocation(EMC_CELL, 0,
+                makeModelLocation(EMC_CELL, "cells"));
+        }
+
+        if (EMC_CAPACITY_CARD != null) {
+            int tierCount = EMC_CAPACITY_CARD.getTierNames().length;
+
+            for (int i = 0; i < tierCount; i++) {
+                ModelLoader.setCustomModelResourceLocation(EMC_CAPACITY_CARD, i,
+                    makeModelLocation(EMC_CAPACITY_CARD, "upgrades", String.valueOf(i + 1)));
+            }
+        }
 
         // Register optional creative cell models
         if (CREATIVE_GAS_CELL != null) {

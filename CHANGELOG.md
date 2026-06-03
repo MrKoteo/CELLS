@@ -12,6 +12,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Added
 - Add JEI recipe transfer support for Import, Export, Universal, and IO interfaces. All interface GUIs expose a shared toggle that saves whether Import interfaces receive recipe inputs or outputs, and IO interfaces route their Import/Export tabs from that same preference.
 - Add JEI recipe transfer support for Creative Cell filters, with the toggle swapping whether JEI adds recipe inputs or outputs.
+- Add the EMC Cell, a ProjectEX-backed AE2 storage cell that exposes partitioned items at a fixed count, converts inserts into buffered EMC, and supports upgrade tiers for larger filter counts.
 
 ### Fixed
 - Fix Compacting Cells preserving the raw stored base-unit count when a tier card rebuild changes the chain depth, which caused decompression cards to show too few items after being added to a non-empty cell.

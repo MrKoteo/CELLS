@@ -31,6 +31,8 @@ import com.cells.Tags;
  */
 public class CellsConfig {
 
+    private static final int[] DEFAULT_EMC_CELL_PARTITION_SLOTS = new int[] {1, 9, 54};
+
     public static final String CATEGORY_GENERAL = "general";
     public static final String CATEGORY_CELLS = "cells";
     public static final String CATEGORY_IDLE_DRAIN = "idle_drain";
@@ -113,6 +115,12 @@ public class CellsConfig {
 
     /** Upgrade slots for configurable cells */
     public static int configurableCellUpgradeSlots = 4;
+
+    /** Server tick interval between EMC cell buffer flushes */
+    public static int emcCellSyncIntervalTicks = 20;
+
+    /** Base tier plus upgrade-defined unlocked partition slots for the EMC cell */
+    public static int[] emcCellPartitionSlots = DEFAULT_EMC_CELL_PARTITION_SLOTS.clone();
 
     /** NBT size warning threshold in KB (tooltip shows warning when exceeded) */
     public static int nbtSizeWarningThresholdKB = 100;
@@ -293,6 +301,20 @@ public class CellsConfig {
         );
         p.setLanguageKey(Tags.MODID + ".config.configurableCellUpgradeSlots");
         configurableCellUpgradeSlots = p.getInt();
+
+        p = config.get(CATEGORY_GENERAL,
+            "emcCellSyncIntervalTicks", 20,
+            "Server tick interval between EMC cell buffer flushes to player EMC (1-72000)", 1, 72000
+        );
+        p.setLanguageKey(Tags.MODID + ".config.emcCellSyncIntervalTicks");
+        emcCellSyncIntervalTicks = p.getInt();
+
+        p = config.get(CATEGORY_GENERAL,
+            "emcCellPartitionSlots", DEFAULT_EMC_CELL_PARTITION_SLOTS,
+            "Unlocked partition slots for EMC cell tiers. Index 0 is the base cell with no upgrade installed. Each following entry unlocks slots for emc_upgrade_1, emc_upgrade_2, and so on."
+        );
+        p.setLanguageKey(Tags.MODID + ".config.emcCellPartitionSlots");
+        emcCellPartitionSlots = sanitizeEmcCellPartitionSlots(p.getIntList());
 
         // General: NBT size warning threshold
         p = config.get(CATEGORY_GENERAL,
@@ -506,6 +528,43 @@ public class CellsConfig {
      */
     public static boolean creativeCellReceivesJeiOutputs() {
         return jeiTransferOutputsToCreativeCell;
+    }
+
+    public static int getEmcCellUnlockedSlots(int tier) {
+        if (emcCellPartitionSlots.length == 0) return DEFAULT_EMC_CELL_PARTITION_SLOTS[0];
+
+        int clampedTier = Math.max(0, Math.min(tier, emcCellPartitionSlots.length - 1));
+        return Math.max(1, emcCellPartitionSlots[clampedTier]);
+    }
+
+    public static int getEmcCellUpgradeTierCount() {
+        return Math.max(0, emcCellPartitionSlots.length - 1);
+    }
+
+    public static int getEmcCellMaxPartitionSlots() {
+        int maxSlots = 1;
+
+        for (int slots : emcCellPartitionSlots) maxSlots = Math.max(maxSlots, slots);
+
+        return maxSlots;
+    }
+
+    public static int[] getEmcCellPartitionSlots() {
+        return emcCellPartitionSlots.clone();
+    }
+
+    private static int[] sanitizeEmcCellPartitionSlots(int[] configuredSlots) {
+        if (configuredSlots == null || configuredSlots.length == 0) {
+            return DEFAULT_EMC_CELL_PARTITION_SLOTS.clone();
+        }
+
+        int[] sanitizedSlots = new int[configuredSlots.length];
+
+        for (int i = 0; i < configuredSlots.length; i++) {
+            sanitizedSlots[i] = Math.max(1, configuredSlots[i]);
+        }
+
+        return sanitizedSlots;
     }
 
     /**
