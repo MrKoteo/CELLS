@@ -17,11 +17,10 @@ import com.cells.Tags;
 
 
 /**
- * Tiny arrow button used by interface GUIs to swap JEI recipe transfer routing.
+ * Tiny 2-state button used by filter GUIs to swap JEI recipe transfer behavior.
  * <p>
- * The shared routing preference decides whether recipe inputs go to Import or Export.
- * On tabbed GUIs, Import is on the left and Export is on the right, so the sprite
- * points at the side that receives recipe inputs.
+ * Interface GUIs use it to show which side receives recipe inputs. Creative cell
+ * GUIs reuse the same compact sprite as an inputs-vs-outputs selector.
  */
 public class GuiRecipeTransferDirectionButton extends GuiButton implements ITooltip {
 
@@ -33,17 +32,17 @@ public class GuiRecipeTransferDirectionButton extends GuiButton implements ITool
     private static final int WIDTH = 24;
     private static final int HEIGHT = 8;
 
-    private final BooleanSupplier inputsGoToExportSupplier;
+    private final BooleanSupplier activeStateSupplier;
     private final Supplier<String> tooltipSupplier;
 
     public GuiRecipeTransferDirectionButton(
             int buttonId,
             int x,
             int y,
-            BooleanSupplier inputsGoToExportSupplier,
+            BooleanSupplier activeStateSupplier,
             Supplier<String> tooltipSupplier) {
         super(buttonId, x, y, WIDTH, HEIGHT, "");
-        this.inputsGoToExportSupplier = inputsGoToExportSupplier;
+        this.activeStateSupplier = activeStateSupplier;
         this.tooltipSupplier = tooltipSupplier;
     }
 
@@ -55,7 +54,7 @@ public class GuiRecipeTransferDirectionButton extends GuiButton implements ITool
             && mouseX < this.x + this.width && mouseY < this.y + this.height;
 
         int u = 0;
-        int offset = this.inputsGoToExportSupplier.getAsBoolean() ? 2 * HEIGHT : 0;
+        int offset = this.activeStateSupplier.getAsBoolean() ? 2 * HEIGHT : 0;
         int v = offset + (hovered ? HEIGHT : 0);
 
         mc.getTextureManager().bindTexture(TEXTURE);

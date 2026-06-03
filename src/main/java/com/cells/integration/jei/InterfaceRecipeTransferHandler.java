@@ -21,22 +21,24 @@ import com.cells.blocks.iointerface.IIOInterfaceHost;
 import com.cells.config.CellsConfig;
 import com.cells.network.CellsNetworkHandler;
 import com.cells.network.packets.PacketJEIInterfaceRecipeTransfer;
+import com.cells.network.sync.IQuickAddFilterContainer;
 import com.cells.network.sync.ResourceType;
 
 
 /**
- * JEI recipe transfer handler for CELLS interface containers.
+ * JEI recipe transfer handler for CELLS filter containers.
  * <p>
- * Single-direction and combined interfaces resolve recipe inputs/outputs from the
- * shared import/export routing preference. IO interfaces split recipe inputs and
- * outputs between their two direction tabs using that same preference.
+ * Interface containers resolve recipe inputs/outputs from the shared
+ * import/export routing preference. Creative cells use the same preference as a
+ * direct inputs-vs-outputs selection for their single filter grid.
  */
 public class InterfaceRecipeTransferHandler<C extends Container> implements IRecipeTransferHandler<C> {
 
     public enum TransferMode {
         SINGLE_DIRECTION,
         COMBINED_ALL_TYPES,
-        IO_SPLIT_DIRECTIONS
+        IO_SPLIT_DIRECTIONS,
+        FILTER_SELECTION_ONLY
     }
 
     private final Class<C> containerClass;
@@ -84,6 +86,8 @@ public class InterfaceRecipeTransferHandler<C extends Container> implements IRec
                 return buildCombinedEntries(container, recipeLayout);
             case IO_SPLIT_DIRECTIONS:
                 return buildIOEntries(container, recipeLayout);
+            case FILTER_SELECTION_ONLY:
+                return buildSelectionEntries(container, recipeLayout);
             default:
                 return Collections.emptyList();
         }
@@ -156,11 +160,30 @@ public class InterfaceRecipeTransferHandler<C extends Container> implements IRec
         return entries;
     }
 
+    private List<PacketJEIInterfaceRecipeTransfer.TransferEntry> buildSelectionEntries(
+            C container,
+            IRecipeLayout recipeLayout) {
+        if (!(container instanceof IQuickAddFilterContainer)) return Collections.emptyList();
+
+        IQuickAddFilterContainer quickAddContainer = (IQuickAddFilterContainer) container;
+        ResourceType type = quickAddContainer.getQuickAddResourceType();
+        RecipeTransferIngredientCollector.RecipeComponentSelection selection = getSelectionForCreativeCell();
+
+        List<Object> resources = RecipeTransferIngredientCollector.collect(recipeLayout, type, selection);
+        return createEntries(type, PacketJEIInterfaceRecipeTransfer.DIRECTION_UNSPECIFIED, resources);
+    }
+
     private static RecipeTransferIngredientCollector.RecipeComponentSelection getSelectionForInterface(
             boolean isExportInterface) {
         return CellsConfig.interfaceReceivesJeiInputs(isExportInterface)
             ? RecipeTransferIngredientCollector.RecipeComponentSelection.INPUTS
             : RecipeTransferIngredientCollector.RecipeComponentSelection.OUTPUTS;
+    }
+
+    private static RecipeTransferIngredientCollector.RecipeComponentSelection getSelectionForCreativeCell() {
+        return CellsConfig.creativeCellReceivesJeiOutputs()
+            ? RecipeTransferIngredientCollector.RecipeComponentSelection.OUTPUTS
+            : RecipeTransferIngredientCollector.RecipeComponentSelection.INPUTS;
     }
 
     private static List<PacketJEIInterfaceRecipeTransfer.TransferEntry> createEntries(

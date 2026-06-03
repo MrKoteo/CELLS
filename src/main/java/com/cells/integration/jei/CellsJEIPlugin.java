@@ -24,6 +24,8 @@ import mezz.jei.api.recipe.IRecipeCategoryRegistration;
 import mezz.jei.config.Constants;
 
 import com.cells.ItemRegistry;
+import com.cells.cells.creative.fluid.ContainerCreativeFluidCell;
+import com.cells.cells.creative.item.ContainerCreativeCell;
 import com.cells.blocks.combinedinterface.ContainerCombinedInterface;
 import com.cells.blocks.interfacebase.fluid.ContainerFluidInterface;
 import com.cells.blocks.interfacebase.item.ContainerItemInterface;
@@ -85,6 +87,7 @@ public class CellsJEIPlugin implements IModPlugin {
         if (enableCellView) registry.addRecipeRegistryPlugin(new CellViewRegistryPlugin());
 
         registerInterfaceRecipeTransferHandlers(registry);
+        registerCreativeCellRecipeTransferHandlers(registry);
 
         // Register Subnet Proxy recipe transfer handler (universal: works with any recipe category)
         SubnetProxyRecipeTransferHandler transferHandler = new SubnetProxyRecipeTransferHandler();
@@ -115,6 +118,18 @@ public class CellsJEIPlugin implements IModPlugin {
         if (ResourceType.ESSENTIA.isAvailable()) registerEssentiaInterfaceTransferHandler(registry);
     }
 
+    private void registerCreativeCellRecipeTransferHandlers(@Nonnull IModRegistry registry) {
+        registry.getRecipeTransferRegistry().addRecipeTransferHandler(
+            new InterfaceRecipeTransferHandler<>(ContainerCreativeCell.class, TransferMode.FILTER_SELECTION_ONLY),
+            Constants.UNIVERSAL_RECIPE_TRANSFER_UID);
+        registry.getRecipeTransferRegistry().addRecipeTransferHandler(
+            new InterfaceRecipeTransferHandler<>(ContainerCreativeFluidCell.class, TransferMode.FILTER_SELECTION_ONLY),
+            Constants.UNIVERSAL_RECIPE_TRANSFER_UID);
+
+        if (ResourceType.GAS.isAvailable()) registerCreativeGasCellTransferHandler(registry);
+        if (ResourceType.ESSENTIA.isAvailable()) registerCreativeEssentiaCellTransferHandler(registry);
+    }
+
     @Optional.Method(modid = "mekeng")
     private void registerGasInterfaceTransferHandler(@Nonnull IModRegistry registry) {
         registry.getRecipeTransferRegistry().addRecipeTransferHandler(
@@ -130,6 +145,24 @@ public class CellsJEIPlugin implements IModPlugin {
             new InterfaceRecipeTransferHandler<>(
                 com.cells.integration.thaumicenergistics.ContainerEssentiaInterface.class,
                 TransferMode.SINGLE_DIRECTION),
+            Constants.UNIVERSAL_RECIPE_TRANSFER_UID);
+    }
+
+    @Optional.Method(modid = "mekeng")
+    private void registerCreativeGasCellTransferHandler(@Nonnull IModRegistry registry) {
+        registry.getRecipeTransferRegistry().addRecipeTransferHandler(
+            new InterfaceRecipeTransferHandler<>(
+                com.cells.cells.creative.gas.ContainerCreativeGasCell.class,
+                TransferMode.FILTER_SELECTION_ONLY),
+            Constants.UNIVERSAL_RECIPE_TRANSFER_UID);
+    }
+
+    @Optional.Method(modid = "thaumicenergistics")
+    private void registerCreativeEssentiaCellTransferHandler(@Nonnull IModRegistry registry) {
+        registry.getRecipeTransferRegistry().addRecipeTransferHandler(
+            new InterfaceRecipeTransferHandler<>(
+                com.cells.cells.creative.essentia.ContainerCreativeEssentiaCell.class,
+                TransferMode.FILTER_SELECTION_ONLY),
             Constants.UNIVERSAL_RECIPE_TRANSFER_UID);
     }
 

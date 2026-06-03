@@ -135,6 +135,9 @@ public class CellsConfig {
     /** Whether JEI recipe transfer sends recipe inputs to Export interfaces and outputs to Import interfaces, or the opposite */
     public static boolean jeiTransferInputsToExport = true;
 
+    /** Whether JEI recipe transfer adds recipe outputs to Creative Cell filters instead of recipe inputs */
+    public static boolean jeiTransferOutputsToCreativeCell = true;
+
     /** Number of upgrade slots for the Subnet Proxy (1-24) */
     public static int subnetProxyUpgradeSlots = 5;
 
@@ -470,6 +473,10 @@ public class CellsConfig {
             "Whether JEI recipe transfer sends recipe inputs to Export interfaces and outputs to Import interfaces, or the opposite.");
         jeiTransferInputsToExport = p.getBoolean();
 
+        p = config.get(CATEGORY_HIDDEN, "jeiTransferOutputsToCreativeCell", jeiTransferInputsToExport,
+            "Whether JEI recipe transfer adds recipe outputs to Creative Cell filters instead of recipe inputs.");
+        jeiTransferOutputsToCreativeCell = p.getBoolean();
+
         // Save if config was created or changed
         if (config.hasChanged()) config.save();
     }
@@ -495,12 +502,29 @@ public class CellsConfig {
     }
 
     /**
-     * Persist the shared JEI routing preference to the hidden config category.
+     * Whether Creative Cell filters should receive JEI recipe outputs.
+     */
+    public static boolean creativeCellReceivesJeiOutputs() {
+        return jeiTransferOutputsToCreativeCell;
+    }
+
+    /**
+     * Persist the interface JEI routing preference to the hidden config category.
      * Must be called from the client side only.
      */
     public static void setJeiTransferInputsToExport(boolean value) {
         jeiTransferInputsToExport = value;
         config.get(CATEGORY_HIDDEN, "jeiTransferInputsToExport", true).set(value);
+        config.save();
+    }
+
+    /**
+     * Persist the Creative Cell JEI transfer preference to the hidden config category.
+     * Must be called from the client side only.
+     */
+    public static void setJeiTransferOutputsToCreativeCell(boolean value) {
+        jeiTransferOutputsToCreativeCell = value;
+        config.get(CATEGORY_HIDDEN, "jeiTransferOutputsToCreativeCell", true).set(value);
         config.save();
     }
 

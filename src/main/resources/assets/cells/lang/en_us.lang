@@ -75,6 +75,8 @@ tooltip.cells.recipe_transfer.mapping1=Import Interface -> %s
 tooltip.cells.recipe_transfer.mapping2=Export Interface -> %s
 tooltip.cells.recipe_transfer.current= §a(You are here)§r
 tooltip.cells.recipe_transfer.click_to_swap=Decides which part of a recipe goes into the filters when clicking '+' in JEI, depending on the interface type. Click to swap interface routing.
+tooltip.cells.recipe_transfer.creative_selection=Clicking '+' in JEI adds %s§7 to this filter.
+tooltip.cells.recipe_transfer.creative_click_to_swap=Click to swap between adding recipe inputs and recipe outputs.
 cells.recipe_component.inputs=JEI §bInputs§r
 cells.recipe_component.outputs=JEI §bOutputs§r
 
