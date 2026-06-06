@@ -8,6 +8,12 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Semantic Versioning: https://semver.org/spec/v2.0.0.html
 
 
+## [0.6.2-alpha3] - 2026-06-06
+### Fixed
+- Fix paged interface tank/storage clicks (pour/fill) using the wrong slot indices, which blocked interacting with page 2+ contents.
+- Fix standalone Essentia Interfaces hiding filters past the first page.
+
+
 ## [0.6.2-alpha2] - 2026-05-26
 ### Added
 - Add JEI recipe transfer support for Import, Export, Universal, and IO interfaces. All interface GUIs expose a shared toggle that saves whether Import interfaces receive recipe inputs or outputs, and IO interfaces route their Import/Export tabs from that same preference.
