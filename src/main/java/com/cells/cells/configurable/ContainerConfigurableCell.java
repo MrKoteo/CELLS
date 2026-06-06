@@ -243,7 +243,7 @@ public class ContainerConfigurableCell extends AEBaseContainer {
             if (cursor.getCount() < requiredComponents) {
                 if (!player.world.isRemote && player instanceof EntityPlayerMP) {
                     ServerMessageHelper.warning(
-                        (EntityPlayerMP) player, "message.cells.configurable_cell.split_stack");
+                        (EntityPlayerMP) player, "cells.configurable_cell.split_stack");
                 }
                 return ItemStack.EMPTY;
             }
@@ -268,7 +268,7 @@ public class ContainerConfigurableCell extends AEBaseContainer {
         if (cursor.getCount() != requiredComponents) {
             if (!player.world.isRemote && player instanceof EntityPlayerMP) {
                 ServerMessageHelper.warning(
-                    (EntityPlayerMP) player, "message.cells.configurable_cell.split_stack");
+                    (EntityPlayerMP) player, "cells.configurable_cell.split_stack");
             }
             return displayedInstalled;
         }
@@ -348,7 +348,7 @@ public class ContainerConfigurableCell extends AEBaseContainer {
             if (slotStack.getCount() < requiredComponents) {
                 if (!player.world.isRemote && player instanceof EntityPlayerMP) {
                     ServerMessageHelper.warning(
-                        (EntityPlayerMP) player, "message.cells.configurable_cell.split_stack");
+                        (EntityPlayerMP) player, "cells.configurable_cell.split_stack");
                 }
                 return ItemStack.EMPTY;
             }
@@ -501,7 +501,7 @@ public class ContainerConfigurableCell extends AEBaseContainer {
             if (requiredComponents > 1 && stack.getCount() < requiredComponents) {
                 if (!simulate && !player.world.isRemote && player instanceof EntityPlayerMP) {
                     ServerMessageHelper.warning(
-                        (EntityPlayerMP) player, "message.cells.configurable_cell.split_stack");
+                        (EntityPlayerMP) player, "cells.configurable_cell.split_stack");
                 }
                 return stack;
             }
