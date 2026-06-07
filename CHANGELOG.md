@@ -14,6 +14,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Fix standalone Essentia Interfaces hiding filters past the first page.
 - Fix some jank interactions with the Configurable Cell's component slots, resulting in voiding components or being able to insert invalid components, in some cases. All cases should be fixed, now.
 - Fix Configurable Cell's warnings/errors using the old translation keys.
+- Remove AE2's hotbar handling (1-9 under F keys) from GUIs, where they may conflict with other numeric fields or keybinds.
 
 
 ## [0.6.2-alpha2] - 2026-05-26
