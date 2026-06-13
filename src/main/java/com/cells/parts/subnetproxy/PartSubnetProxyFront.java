@@ -537,6 +537,13 @@ public class PartSubnetProxyFront extends AEBasePart
     private SubnetProxyGridCoordinator currentFrontGridCoord;
 
     /**
+     * Front-grid identity paired with {@link #currentFrontGridCoord}. This lets
+     * hot-path election checks distinguish a live coordinator miss from a stale
+     * cached coordinator that still belongs to an old grid.
+     */
+    private IGrid currentFrontGrid;
+
+    /**
      * Listener registered on Grid A's IMEMonitors (all channels).
      * Typed as raw to handle multiple storage channels with a single instance.
      * Sets {@link #deltasDirty} and alerts Grid B's tick manager on change.
@@ -854,7 +861,7 @@ public class PartSubnetProxyFront extends AEBasePart
         IGrid frontGrid = getFrontGridLive();
         if (frontGrid == null) return Collections.emptyList();
 
-        SubnetProxyGridCoordinator coord = SubnetProxyGridCoordinator.getOrNull(frontGrid);
+        SubnetProxyGridCoordinator coord = getFrontGridCoordinator(frontGrid);
         if (coord == null) return Collections.emptyList();
 
         List<PartSubnetProxyFront> visiblePeers = new ArrayList<>();
@@ -1070,6 +1077,7 @@ public class PartSubnetProxyFront extends AEBasePart
             this.currentFrontGridCoord.unregisterFront(this);
             this.currentFrontGridCoord = null;
         }
+        this.currentFrontGrid = null;
         this.peerFronts = new ArrayList<>();
         this.exposedOrigins = new HashSet<>();
         super.removeFromWorld();
@@ -2192,7 +2200,7 @@ public class PartSubnetProxyFront extends AEBasePart
             // ---- Election: only one front per origin publishes on a given grid ----
             // Diamond topologies (A→B→D + A→C→D) are dedup'd here:
             // exactly one of B→D / C→D is elected to forward A's deltas.
-            SubnetProxyGridCoordinator coord = currentFrontGridCoord;
+            SubnetProxyGridCoordinator coord = getFrontGridCoordinator(frontGrid);
             if (coord != null && !coord.isElected(PartSubnetProxyFront.this, origin)) return;
 
             // ---- Event-UUID dedup (belt-and-suspenders) ----
@@ -2573,6 +2581,33 @@ public class PartSubnetProxyFront extends AEBasePart
     }
 
     /**
+     * Resolve the coordinator for the current front-grid.
+     *
+     * Listing and delta forwarding should follow the live per-grid coordinator,
+     * not just the cached reference that is normally refreshed during source
+     * rebuilds. If the live registry is temporarily missing our coordinator,
+     * repair the registration once before falling back.
+     */
+    @Nullable
+    private SubnetProxyGridCoordinator getFrontGridCoordinator(@Nullable IGrid frontGrid) {
+        if (frontGrid == null) return null;
+
+        SubnetProxyGridCoordinator liveCoord = SubnetProxyGridCoordinator.getOrNull(frontGrid);
+        if (liveCoord != null) return liveCoord;
+
+        if (frontGrid != this.currentFrontGrid || this.currentFrontGridCoord == null) {
+            refreshCoordinatorRegistration();
+
+            if (frontGrid != getFrontGridLive()) return null;
+
+            liveCoord = SubnetProxyGridCoordinator.getOrNull(frontGrid);
+            if (liveCoord != null) return liveCoord;
+        }
+
+        return frontGrid == this.currentFrontGrid ? this.currentFrontGridCoord : null;
+    }
+
+    /**
      * Build the exposed-origins set: own back-grid + each peer's back-grid.
      * Filters out nulls (peers in transient states with no grid yet).
      */
@@ -2603,11 +2638,12 @@ public class PartSubnetProxyFront extends AEBasePart
             ? SubnetProxyGridCoordinator.getOrCreate(frontGrid)
             : null;
 
-        if (newCoord != this.currentFrontGridCoord) {
+        if (newCoord != this.currentFrontGridCoord || frontGrid != this.currentFrontGrid) {
             if (this.currentFrontGridCoord != null) {
                 this.currentFrontGridCoord.unregisterFront(this);
             }
 
+            this.currentFrontGrid = frontGrid;
             this.currentFrontGridCoord = newCoord;
             if (newCoord != null) newCoord.registerFront(this);
         } else if (newCoord != null) {
@@ -2664,7 +2700,7 @@ public class PartSubnetProxyFront extends AEBasePart
         IGrid frontGrid = getFrontGridLive();
         if (frontGrid != null && origin == frontGrid) return false;
 
-        SubnetProxyGridCoordinator coord = this.currentFrontGridCoord;
+        SubnetProxyGridCoordinator coord = getFrontGridCoordinator(frontGrid);
         return coord == null || coord.isElected(this, origin);
     }
 
@@ -2913,7 +2949,7 @@ public class PartSubnetProxyFront extends AEBasePart
         IGrid frontGrid = getFrontGridLive();
         if (frontGrid == null) return;
 
-        SubnetProxyGridCoordinator coord = SubnetProxyGridCoordinator.getOrNull(frontGrid);
+        SubnetProxyGridCoordinator coord = getFrontGridCoordinator(frontGrid);
         if (coord == null) return;
 
         // Resolve channel identity once per call to avoid per-peer lookups.
@@ -2999,7 +3035,7 @@ public class PartSubnetProxyFront extends AEBasePart
         IGrid frontGrid = getFrontGridLive();
         if (frontGrid == null) return null;
 
-        SubnetProxyGridCoordinator coord = SubnetProxyGridCoordinator.getOrNull(frontGrid);
+        SubnetProxyGridCoordinator coord = getFrontGridCoordinator(frontGrid);
         if (coord == null) return null;
 
         IItemStorageChannel itemCh = itemChannel();
