@@ -23,9 +23,13 @@ import com.cells.network.packets.PacketSwitchTab;
 import com.cells.network.packets.PacketSyncSlotSizeOverride;
 import com.cells.network.packets.PacketChangeFilterMode;
 import com.cells.network.packets.PacketJEISubnetProxyFilter;
+import com.cells.network.packets.PacketJEIInterfaceRecipeTransfer;
 import com.cells.network.packets.PacketSetProxyPriority;
 import com.cells.network.packets.PacketOpenProxyPriority;
+import com.cells.network.packets.PacketToggleProxyChannel;
 import com.cells.network.sync.PacketQuickAddFilter;
+import com.cells.network.sync.PacketCompactingPatternPreview;
+import com.cells.network.sync.PacketCompactingPatternMultiplier;
 import com.cells.network.sync.PacketResourceSlot;
 import com.cells.network.sync.PacketStorageSync;
 
@@ -62,6 +66,13 @@ public class CellsNetworkHandler {
         // Unified quick-add packet (handles quick-add for ALL resource types)
         INSTANCE.registerMessage(PacketQuickAddFilter.Handler.class, PacketQuickAddFilter.class, packetId++, Side.SERVER);
 
+        // Compacting Pattern Exposer multiplier sync (bidirectional)
+        INSTANCE.registerMessage(PacketCompactingPatternMultiplier.ServerHandler.class, PacketCompactingPatternMultiplier.class, packetId++, Side.SERVER);
+        INSTANCE.registerMessage(PacketCompactingPatternMultiplier.ClientHandler.class, PacketCompactingPatternMultiplier.class, packetId++, Side.CLIENT);
+
+        // Compacting Pattern Exposer preview sync (server->client)
+        INSTANCE.registerMessage(PacketCompactingPatternPreview.ClientHandler.class, PacketCompactingPatternPreview.class, packetId++, Side.CLIENT);
+
         // Storage sync packet (server→client: syncs storage identity + amount per slot)
         INSTANCE.registerMessage(PacketStorageSync.ClientHandler.class, PacketStorageSync.class, packetId++, Side.CLIENT);
 
@@ -84,10 +95,16 @@ public class CellsNetworkHandler {
         // Subnet Proxy: JEI recipe transfer batch filter add
         INSTANCE.registerMessage(PacketJEISubnetProxyFilter.Handler.class, PacketJEISubnetProxyFilter.class, packetId++, Side.SERVER);
 
+        // Interfaces: JEI recipe transfer batch filter add
+        INSTANCE.registerMessage(PacketJEIInterfaceRecipeTransfer.Handler.class, PacketJEIInterfaceRecipeTransfer.class, packetId++, Side.SERVER);
+
         // Subnet Proxy: priority setting for insertion card
         INSTANCE.registerMessage(PacketSetProxyPriority.Handler.class, PacketSetProxyPriority.class, packetId++, Side.SERVER);
 
         // Subnet Proxy: open AE2 priority GUI
         INSTANCE.registerMessage(PacketOpenProxyPriority.Handler.class, PacketOpenProxyPriority.class, packetId++, Side.SERVER);
+
+        // Subnet Proxy: toggle a single channel's exposure on the front-grid
+        INSTANCE.registerMessage(PacketToggleProxyChannel.Handler.class, PacketToggleProxyChannel.class, packetId++, Side.SERVER);
     }
 }

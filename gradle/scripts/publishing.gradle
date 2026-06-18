@@ -93,6 +93,8 @@ if (propertyBool('publish_to_curseforge')) {
                     optionalDependency 'mekanism-energistics'
                     // Optional: JEI
                     optionalDependency 'jei'
+                    // Optional: ProjectEX
+                    optionalDependency 'projectex'
                 }
             }
             options {

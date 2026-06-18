@@ -156,7 +156,6 @@ public class GuiCombinedInterface
     // ================================= Slot creation =================================
 
     @Override
-    @SuppressWarnings("rawtypes")
     protected GuiCustomSlot createFilterSlotForIndex(int displaySlot, int x, int y) {
         ResourceType activeTab = getActiveTabFromContainer();
 

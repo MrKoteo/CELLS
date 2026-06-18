@@ -22,6 +22,8 @@ import net.minecraft.world.IBlockAccess;
 import appeng.api.AEApi;
 import appeng.api.implementations.IPowerChannelState;
 import appeng.api.networking.GridFlags;
+import appeng.api.networking.IGrid;
+import appeng.api.networking.IGridNode;
 import appeng.api.networking.events.MENetworkCellArrayUpdate;
 import appeng.api.networking.events.MENetworkChannelsChanged;
 import appeng.api.networking.events.MENetworkEventSubscribe;
@@ -30,6 +32,7 @@ import appeng.api.parts.IPartCollisionHelper;
 import appeng.api.parts.IPartHost;
 import appeng.api.parts.IPartModel;
 import appeng.api.parts.IPart;
+import appeng.api.parts.PartItemStack;
 import appeng.api.util.AECableType;
 import appeng.api.util.AEPartLocation;
 import appeng.items.parts.PartModels;
@@ -37,9 +40,11 @@ import appeng.me.GridAccessException;
 import appeng.parts.AEBasePart;
 import appeng.parts.PartModel;
 
+import com.cells.api.ISubnetProxy;
 import com.cells.Tags;
 import com.cells.parts.CellsPartType;
 import com.cells.parts.ItemCellsPart;
+import com.cells.util.PowerStateHelper;
 
 
 /**
@@ -58,7 +63,7 @@ import com.cells.parts.ItemCellsPart;
  * insertion handler (when an Insertion Card is installed) live on
  * the front part, registered on the front's grid.
  */
-public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelState {
+public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelState, ISubnetProxy {
 
     // LED state flags (mirroring PartBasicState constants)
     protected static final int POWERED_FLAG = 1;
@@ -128,6 +133,13 @@ public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelStat
         this.cachedHasFront = false;
     }
 
+    private void markHostForUpdate() {
+        IPartHost host = this.getHost();
+        if (host == null) return;
+
+        host.markForUpdate();
+    }
+
     @Override
     public void readFromNBT(final NBTTagCompound extra) {
         super.readFromNBT(extra);
@@ -152,12 +164,12 @@ public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelStat
 
     @MENetworkEventSubscribe
     public void stateChange(final MENetworkChannelsChanged c) {
-        this.getHost().markForUpdate();
+        this.markHostForUpdate();
     }
 
     @MENetworkEventSubscribe
     public void stateChange(final MENetworkPowerStatusChange c) {
-        this.getHost().markForUpdate();
+        this.markHostForUpdate();
     }
 
     /**
@@ -176,9 +188,12 @@ public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelStat
         TileEntity selfTile = this.getHost() != null ? this.getHost().getTile() : null;
         if (selfTile == null || selfTile.getWorld() == null) return null;
 
+        AEPartLocation side = this.getSide();
+        if (side == null) return null;
+
         // The front part is in the adjacent block in our facing direction,
         // on the opposite side (facing back toward us).
-        EnumFacing facing = this.getSide().getFacing();
+        EnumFacing facing = side.getFacing();
         BlockPos adjacentPos = selfTile.getPos().offset(facing);
         TileEntity adjacentTile = selfTile.getWorld().getTileEntity(adjacentPos);
         if (!(adjacentTile instanceof IPartHost)) return null;
@@ -198,29 +213,38 @@ public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelStat
 
         if (hasFront != this.cachedHasFront) {
             this.cachedHasFront = hasFront;
-            this.getHost().markForUpdate();
+            this.markHostForUpdate();
         }
     }
 
     // ========================= LED State from Outer Proxy =========================
 
-    @Override
-    public void writeToStream(final ByteBuf data) throws IOException {
-        // Derive LED state from the outer proxy, not the orphaned inner proxy
+    private int computeStateFlags() {
         int flags = 0;
-        try {
-            if (this.getProxy().getEnergy().isNetworkPowered()) {
-                flags |= POWERED_FLAG;
-            }
-            if (this.getProxy().getNode() != null && this.getProxy().getNode().meetsChannelRequirements()) {
-                flags |= CHANNEL_FLAG;
-            }
-        } catch (final GridAccessException e) {
-            // No grid yet, flags stay 0
+        if (PowerStateHelper.isPowered(this.getProxy())) flags |= POWERED_FLAG;
+        if (PowerStateHelper.hasChannel(this.getProxy())) flags |= CHANNEL_FLAG;
+        if (this.cachedHasFront) flags |= BOTH_PARTS_FLAG;
+
+        return flags;
+    }
+
+    /**
+     * WAILA/TOP may query power state on the logical server, so the display
+     * status must not rely solely on the client-side stream cache.
+     */
+    private int getStateFlags() {
+        TileEntity hostTile = this.getHost() != null ? this.getHost().getTile() : null;
+        if (hostTile != null && hostTile.getWorld() != null && !hostTile.getWorld().isRemote) {
+            return this.computeStateFlags();
         }
 
-        // Use cached counterpart presence (updated on neighbor changes)
-        if (this.cachedHasFront) flags |= BOTH_PARTS_FLAG;
+        return this.clientFlags;
+    }
+
+    @Override
+    public void writeToStream(final ByteBuf data) throws IOException {
+        int flags = this.computeStateFlags();
+        this.clientFlags = flags;
 
         data.writeByte((byte) flags);
     }
@@ -234,14 +258,15 @@ public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelStat
 
     @Override
     public boolean isPowered() {
-        return (this.clientFlags & POWERED_FLAG) == POWERED_FLAG;
+        return (this.getStateFlags() & POWERED_FLAG) == POWERED_FLAG;
     }
 
     @Override
     public boolean isActive() {
-        // Active only if we have a channel AND the front counterpart is present
-        return (this.clientFlags & CHANNEL_FLAG) == CHANNEL_FLAG
-            && (this.clientFlags & BOTH_PARTS_FLAG) == BOTH_PARTS_FLAG;
+        int flags = this.getStateFlags();
+
+        return (flags & CHANNEL_FLAG) == CHANNEL_FLAG
+            && (flags & BOTH_PARTS_FLAG) == BOTH_PARTS_FLAG;
     }
 
     // ========================= Collision & Cable =========================
@@ -260,6 +285,69 @@ public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelStat
     @Override
     public float getCableConnectionLength(AECableType cable) {
         return 2;
+    }
+
+    @Override
+    public int getFilterSlots() {
+        PartSubnetProxyFront front = findFrontPart();
+        return front != null ? front.getFilterSlots() : 0;
+    }
+
+    @Override
+    @Nonnull
+    public ItemStack getFilter(int slot) {
+        PartSubnetProxyFront front = findFrontPart();
+        return front != null ? front.getFilter(slot) : ItemStack.EMPTY;
+    }
+
+    @Override
+    public void setFilter(int slot, @Nonnull ItemStack stack) {
+        PartSubnetProxyFront front = findFrontPart();
+        if (front == null) return;
+
+        front.setFilter(slot, stack);
+    }
+
+    @Override
+    public void clearFilters() {
+        PartSubnetProxyFront front = findFrontPart();
+        if (front == null) return;
+
+        front.clearFilters();
+    }
+
+    @Override
+    public boolean isOutboundConnection() {
+        return false;
+    }
+
+    @Override
+    @Nonnull
+    public EnumFacing getPrimaryFacing() {
+        AEPartLocation side = this.getSide();
+        return side != null ? side.getFacing() : EnumFacing.NORTH;
+    }
+
+    @Override
+    @Nullable
+    public IGrid getTargetGrid() {
+        PartSubnetProxyFront front = findFrontPart();
+        if (front == null) return null;
+
+        IGridNode node = front.getProxy().getNode();
+        return node != null ? node.getGrid() : null;
+    }
+
+    @Override
+    @Nonnull
+    public ItemStack getRemoteDisplayStack() {
+        PartSubnetProxyFront front = findFrontPart();
+        return front != null ? front.getItemStack(PartItemStack.PICK) : ItemStack.EMPTY;
+    }
+
+    @Override
+    public boolean useStandardMemoryCard() {
+        return false;
     }
 
     // ========================= Right-click handling =========================
@@ -290,6 +378,21 @@ public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelStat
         return true;
     }
 
+    @Override
+    public boolean onPartShiftActivate(final EntityPlayer player, final EnumHand hand, final Vec3d pos) {
+        TileEntity te = this.getHost() != null ? this.getHost().getTile() : null;
+        if (te != null && te.getWorld() != null && te.getWorld().getTotalWorldTime() == this.placedTick) return false;
+
+        PartSubnetProxyFront front = findFrontPart();
+        if (front != null) return front.onPartShiftActivate(player, hand, pos);
+
+        if (!player.world.isRemote) {
+            player.sendMessage(new TextComponentTranslation("chat.cells.subnet_proxy.need_front"));
+        }
+
+        return true;
+    }
+
     /**
      * Check if the player is holding a specific CELLS part type.
      */
@@ -309,8 +412,14 @@ public class PartSubnetProxyBack extends AEBasePart implements IPowerChannelStat
     private boolean tryPlaceComplementaryPart(EntityPlayer player, EnumHand hand) {
         if (player.world.isRemote) return true;
 
-        EnumFacing facing = this.getSide().getFacing();
-        TileEntity selfTile = this.getHost().getTile();
+        IPartHost host = this.getHost();
+        AEPartLocation side = this.getSide();
+        if (host == null || side == null) return true;
+
+        TileEntity selfTile = host.getTile();
+        if (selfTile == null) return true;
+
+        EnumFacing facing = side.getFacing();
         BlockPos adjacentPos = selfTile.getPos().offset(facing);
 
         // Delegate to AE2's part placement helper

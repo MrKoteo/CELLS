@@ -31,6 +31,9 @@ import com.cells.Tags;
  */
 public class CellsConfig {
 
+    private static final int[] DEFAULT_EMC_CELL_PARTITION_SLOTS = new int[] {1, 9, 54};
+    public static final long DEFAULT_EMC_CELL_REPORTED_AMOUNT = Integer.MAX_VALUE;
+
     public static final String CATEGORY_GENERAL = "general";
     public static final String CATEGORY_CELLS = "cells";
     public static final String CATEGORY_IDLE_DRAIN = "idle_drain";
@@ -114,6 +117,15 @@ public class CellsConfig {
     /** Upgrade slots for configurable cells */
     public static int configurableCellUpgradeSlots = 4;
 
+    /** Server tick interval between EMC cell buffer flushes */
+    public static int emcCellSyncIntervalTicks = 20;
+
+    /** Reported stack size for learned EMC cell filters */
+    public static long emcCellReportedAmount = DEFAULT_EMC_CELL_REPORTED_AMOUNT;
+
+    /** Base tier plus upgrade-defined unlocked partition slots for the EMC cell */
+    public static int[] emcCellPartitionSlots = DEFAULT_EMC_CELL_PARTITION_SLOTS.clone();
+
     /** NBT size warning threshold in KB (tooltip shows warning when exceeded) */
     public static int nbtSizeWarningThresholdKB = 100;
 
@@ -130,7 +142,13 @@ public class CellsConfig {
     public static boolean useFixedInterfaceTextures = true;
 
     /** Whether the controls help panel is visible in Interface GUIs. Persisted as a hidden config. */
-    public static boolean showControlsHelp = true;
+    public static boolean showControlsHelp = false;
+
+    /** Whether JEI recipe transfer sends recipe inputs to Export interfaces and outputs to Import interfaces, or the opposite */
+    public static boolean jeiTransferInputsToExport = true;
+
+    /** Whether JEI recipe transfer adds recipe outputs to Creative Cell filters instead of recipe inputs */
+    public static boolean jeiTransferOutputsToCreativeCell = true;
 
     /** Number of upgrade slots for the Subnet Proxy (1-24) */
     public static int subnetProxyUpgradeSlots = 5;
@@ -140,6 +158,9 @@ public class CellsConfig {
 
     /** Maximum tick rate for the Subnet Proxy (ticks between updates when idle) */
     public static int subnetProxyMaxTickRate = 60;
+
+    /** Enable Subnet Proxy extraction-fault reporting and warning logs */
+    public static boolean subnetProxyReportExtractionFaults = false;
 
     /** Essentia Creative Cell fix */
     public static boolean enableEssentiaCreativeCellFix = true;
@@ -287,6 +308,34 @@ public class CellsConfig {
         );
         p.setLanguageKey(Tags.MODID + ".config.configurableCellUpgradeSlots");
         configurableCellUpgradeSlots = p.getInt();
+
+        p = config.get(CATEGORY_GENERAL,
+            "emcCellSyncIntervalTicks", 20,
+            "Server tick interval between EMC cell buffer flushes to player EMC (1-72000)", 1, 72000
+        );
+        p.setLanguageKey(Tags.MODID + ".config.emcCellSyncIntervalTicks");
+        emcCellSyncIntervalTicks = p.getInt();
+
+        // Use String to preserve values above Integer.MAX_VALUE in the Forge config GUI.
+        p = config.get(CATEGORY_GENERAL,
+            "emcCellReportedAmount", String.valueOf(DEFAULT_EMC_CELL_REPORTED_AMOUNT),
+            "Reported stack size for learned EMC cell filters. Use a positive non-zero number up to Long.MAX_VALUE. Invalid values fall back to the default."
+        );
+        p.setLanguageKey(Tags.MODID + ".config.emcCellReportedAmount");
+        String reportedAmountStr = p.getString();
+        try {
+            long parsed = Long.parseLong(reportedAmountStr);
+            emcCellReportedAmount = parsed > 0 ? parsed : DEFAULT_EMC_CELL_REPORTED_AMOUNT;
+        } catch (NumberFormatException e) {
+            emcCellReportedAmount = DEFAULT_EMC_CELL_REPORTED_AMOUNT;
+        }
+
+        p = config.get(CATEGORY_GENERAL,
+            "emcCellPartitionSlots", DEFAULT_EMC_CELL_PARTITION_SLOTS,
+            "Unlocked partition slots for EMC cell tiers. Index 0 is the base cell with no upgrade installed. Each following entry unlocks slots for emc_upgrade_1, emc_upgrade_2, and so on."
+        );
+        p.setLanguageKey(Tags.MODID + ".config.emcCellPartitionSlots");
+        emcCellPartitionSlots = sanitizeEmcCellPartitionSlots(p.getIntList());
 
         // General: NBT size warning threshold
         p = config.get(CATEGORY_GENERAL,
@@ -458,10 +507,26 @@ public class CellsConfig {
         p.setLanguageKey(Tags.MODID + ".config.subnetProxyMaxTickRate");
         subnetProxyMaxTickRate = p.getInt();
 
+        p = config.get(CATEGORY_GENERAL,
+            "subnetProxyReportExtractionFaults", false,
+            "Enable Subnet Proxy extraction-fault reporting and warning logs. " +
+            "A reported fault can originate from the proxy, a connected inventory, or the network itself."
+        );
+        p.setLanguageKey(Tags.MODID + ".config.subnetProxyReportExtractionFaults");
+        subnetProxyReportExtractionFaults = p.getBoolean();
+
         // Hidden category: GUI preferences (not shown in config GUI)
-        p = config.get(CATEGORY_HIDDEN, "showControlsHelp", true,
+        p = config.get(CATEGORY_HIDDEN, "showControlsHelp", false,
             "Whether the controls help panel is visible in Interface GUIs.");
         showControlsHelp = p.getBoolean();
+
+        p = config.get(CATEGORY_HIDDEN, "jeiTransferInputsToExport", true,
+            "Whether JEI recipe transfer sends recipe inputs to Export interfaces and outputs to Import interfaces, or the opposite.");
+        jeiTransferInputsToExport = p.getBoolean();
+
+        p = config.get(CATEGORY_HIDDEN, "jeiTransferOutputsToCreativeCell", jeiTransferInputsToExport,
+            "Whether JEI recipe transfer adds recipe outputs to Creative Cell filters instead of recipe inputs.");
+        jeiTransferOutputsToCreativeCell = p.getBoolean();
 
         // Save if config was created or changed
         if (config.hasChanged()) config.save();
@@ -475,7 +540,79 @@ public class CellsConfig {
      */
     public static void setShowControlsHelp(boolean value) {
         showControlsHelp = value;
-        config.get(CATEGORY_HIDDEN, "showControlsHelp", true).set(value);
+        config.get(CATEGORY_HIDDEN, "showControlsHelp", false).set(value);
+        config.save();
+    }
+
+    /**
+     * Whether the given interface direction should receive JEI recipe inputs.
+     * Export uses the shared preference directly and Import receives the opposite side.
+     */
+    public static boolean interfaceReceivesJeiInputs(boolean isExportInterface) {
+        return isExportInterface ? jeiTransferInputsToExport : !jeiTransferInputsToExport;
+    }
+
+    /**
+     * Whether Creative Cell filters should receive JEI recipe outputs.
+     */
+    public static boolean creativeCellReceivesJeiOutputs() {
+        return jeiTransferOutputsToCreativeCell;
+    }
+
+    public static int getEmcCellUnlockedSlots(int tier) {
+        if (emcCellPartitionSlots.length == 0) return DEFAULT_EMC_CELL_PARTITION_SLOTS[0];
+
+        int clampedTier = Math.max(0, Math.min(tier, emcCellPartitionSlots.length - 1));
+        return Math.max(1, emcCellPartitionSlots[clampedTier]);
+    }
+
+    public static int getEmcCellUpgradeTierCount() {
+        return Math.max(0, emcCellPartitionSlots.length - 1);
+    }
+
+    public static int getEmcCellMaxPartitionSlots() {
+        int maxSlots = 1;
+
+        for (int slots : emcCellPartitionSlots) maxSlots = Math.max(maxSlots, slots);
+
+        return maxSlots;
+    }
+
+    public static int[] getEmcCellPartitionSlots() {
+        return emcCellPartitionSlots.clone();
+    }
+
+    private static int[] sanitizeEmcCellPartitionSlots(int[] configuredSlots) {
+        if (configuredSlots == null || configuredSlots.length == 0) {
+            return DEFAULT_EMC_CELL_PARTITION_SLOTS.clone();
+        }
+
+        int[] sanitizedSlots = new int[configuredSlots.length];
+
+        for (int i = 0; i < configuredSlots.length; i++) {
+            sanitizedSlots[i] = Math.max(1, configuredSlots[i]);
+        }
+
+        return sanitizedSlots;
+    }
+
+    /**
+     * Persist the interface JEI routing preference to the hidden config category.
+     * Must be called from the client side only.
+     */
+    public static void setJeiTransferInputsToExport(boolean value) {
+        jeiTransferInputsToExport = value;
+        config.get(CATEGORY_HIDDEN, "jeiTransferInputsToExport", true).set(value);
+        config.save();
+    }
+
+    /**
+     * Persist the Creative Cell JEI transfer preference to the hidden config category.
+     * Must be called from the client side only.
+     */
+    public static void setJeiTransferOutputsToCreativeCell(boolean value) {
+        jeiTransferOutputsToCreativeCell = value;
+        config.get(CATEGORY_HIDDEN, "jeiTransferOutputsToCreativeCell", true).set(value);
         config.save();
     }
 

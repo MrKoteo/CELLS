@@ -25,7 +25,9 @@ import mezz.jei.api.gui.IGhostIngredientHandler.Target;
 
 import com.cells.Tags;
 import com.cells.client.KeyBindings;
+import com.cells.config.CellsConfig;
 import com.cells.gui.GuiClearFiltersButton;
+import com.cells.gui.GuiRecipeTransferDirectionButton;
 import com.cells.gui.slots.AbstractResourceFilterSlot;
 
 
@@ -35,6 +37,7 @@ import com.cells.gui.slots.AbstractResourceFilterSlot;
  * Provides common functionality:
  * - Standard texture and dimensions (210x241)
  * - Clear filters button
+ * - JEI recipe transfer selection toggle
  * - Title and inventory label rendering
  * - JEI ghost ingredient setup
  * - Quick-add keybind handling
@@ -50,6 +53,7 @@ public abstract class AbstractCreativeCellGui<C extends AbstractCreativeCellCont
 
     protected final C container;
     protected GuiClearFiltersButton clearButton;
+    protected GuiRecipeTransferDirectionButton recipeTransferDirectionButton;
     protected final Map<Target<?>, Object> mapTargetSlot = new HashMap<>();
 
     protected AbstractCreativeCellGui(C container) {
@@ -101,6 +105,19 @@ public abstract class AbstractCreativeCellGui<C extends AbstractCreativeCellCont
     protected abstract void doClearFilters();
 
     /**
+     * Build the creative-cell JEI transfer tooltip shown by the top-right toggle.
+     */
+    protected String getRecipeTransferButtonTooltip() {
+        String transferType = CellsConfig.creativeCellReceivesJeiOutputs() ? "outputs" : "inputs";
+        String selectedComponent = I18n.format("cells.recipe_component." + transferType);
+
+        return I18n.format("tooltip.cells.recipe_transfer.title") + "\n\n"
+            + I18n.format("tooltip.cells.recipe_transfer.creative_selection", selectedComponent) + "\n"
+            + "\n"
+            + I18n.format("tooltip.cells.recipe_transfer.creative_click_to_swap");
+    }
+
+    /**
      * Handle quick-add keybind for the hovered slot.
      * Returns true if the keybind was handled.
      */
@@ -113,6 +130,14 @@ public abstract class AbstractCreativeCellGui<C extends AbstractCreativeCellCont
         // Create type-specific filter slots
         createFilterSlots();
 
+        this.recipeTransferDirectionButton = new GuiRecipeTransferDirectionButton(
+            1,
+            this.guiLeft + 182,
+            this.guiTop + 5,
+            CellsConfig::creativeCellReceivesJeiOutputs,
+            this::getRecipeTransferButtonTooltip);
+        this.buttonList.add(this.recipeTransferDirectionButton);
+
         // Clear filters button - positioned right of the hotbar
         // Player inventory starts at y=159, hotbar is 58px below top of player inventory section
         this.clearButton = new GuiClearFiltersButton(0, this.guiLeft + 176 + 2, this.guiTop + 159 + 58,
@@ -123,8 +148,25 @@ public abstract class AbstractCreativeCellGui<C extends AbstractCreativeCellCont
 
     @Override
     public void drawFG(int offsetX, int offsetY, int mouseX, int mouseY) {
-        // Title
         String title = I18n.format(getTitleKey());
+
+        // Keep the title clear of the JEI transfer toggle in the top-right corner.
+        int maxTitleWidth = 170;
+        int titleWidth = this.fontRenderer.getStringWidth(title);
+
+        if (titleWidth > maxTitleWidth) {
+            String ellipsis = "...";
+            int ellipsisWidth = this.fontRenderer.getStringWidth(ellipsis);
+            int availableWidth = maxTitleWidth - ellipsisWidth;
+
+            while (titleWidth > availableWidth && !title.isEmpty()) {
+                title = title.substring(0, title.length() - 1);
+                titleWidth = this.fontRenderer.getStringWidth(title);
+            }
+
+            title = title + ellipsis;
+        }
+
         this.fontRenderer.drawString(title, 8, 6, 0x404040);
 
         // "Inventory" label above player inventory slots
@@ -139,8 +181,6 @@ public abstract class AbstractCreativeCellGui<C extends AbstractCreativeCellCont
 
     @Override
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
-        if (this.checkHotbarKeys(keyCode)) return;
-
         // Handle quick-add keybind
         if (KeyBindings.QUICK_ADD_TO_FILTER.isActiveAndMatches(keyCode)) {
             Slot hoveredSlot = this.getSlotUnderMouse();
@@ -153,6 +193,11 @@ public abstract class AbstractCreativeCellGui<C extends AbstractCreativeCellCont
     @Override
     protected void actionPerformed(@Nonnull final GuiButton btn) throws IOException {
         super.actionPerformed(btn);
+
+        if (btn == this.recipeTransferDirectionButton) {
+            CellsConfig.setJeiTransferOutputsToCreativeCell(!CellsConfig.creativeCellReceivesJeiOutputs());
+            return;
+        }
 
         if (btn == this.clearButton) doClearFilters();
     }

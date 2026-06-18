@@ -15,11 +15,13 @@ import com.cells.cells.creative.item.CreativeCellHandler;
 import com.cells.cells.creative.fluid.CreativeFluidCellHandler;
 import com.cells.cells.creative.gas.CreativeGasCellHandler;
 import com.cells.cells.creative.essentia.CreativeEssentiaCellHandler;
+import com.cells.cells.emc.EmcCellHandler;
 import com.cells.cells.normal.compacting.CompactingCellHandler;
 import com.cells.cells.hyperdensity.fluid.FluidHyperDensityCellHandler;
 import com.cells.cells.hyperdensity.item.HyperDensityCellHandler;
 import com.cells.cells.hyperdensity.compacting.HyperDensityCompactingCellHandler;
 import com.cells.integration.mekanismenergistics.MekanismEnergisticsIntegration;
+import com.cells.integration.projectex.ProjectEXIntegration;
 import com.cells.integration.thaumicenergistics.ThaumicEnergisticsIntegration;
 import com.cells.network.MemoryCardServerHandler;
 import com.cells.parts.PartRegistry;
@@ -67,6 +69,10 @@ public class CommonProxy {
         // Register the creative cell handlers with AE2
         AEApi.instance().registries().cell().addCellHandler(CreativeCellHandler.INSTANCE);
         AEApi.instance().registries().cell().addCellHandler(CreativeFluidCellHandler.INSTANCE);
+
+        if (ProjectEXIntegration.isModLoaded()) {
+            AEApi.instance().registries().cell().addCellHandler(EmcCellHandler.INSTANCE);
+        }
 
         // Register optional creative cell handlers
         if (MekanismEnergisticsIntegration.isModLoaded()) {

@@ -14,6 +14,9 @@ import net.minecraftforge.fml.common.network.IGuiHandler;
 import appeng.api.parts.IPart;
 import appeng.api.util.AEPartLocation;
 
+import com.cells.blocks.compactingpatternexposer.ContainerCompactingPatternExposer;
+import com.cells.blocks.compactingpatternexposer.GuiCompactingPatternExposer;
+import com.cells.blocks.compactingpatternexposer.TileCompactingPatternExposer;
 import com.cells.blocks.interfacebase.fluid.ContainerFluidInterface;
 import com.cells.blocks.interfacebase.item.ContainerItemInterface;
 import com.cells.blocks.interfacebase.fluid.GuiFluidInterface;
@@ -75,6 +78,7 @@ public class CellsGuiHandler implements IGuiHandler {
     public static final int GUI_COMBINED_EXPORT_INTERFACE = 14;
     public static final int GUI_ITEM_IO_INTERFACE = 15;
     public static final int GUI_FLUID_IO_INTERFACE = 16;
+    public static final int GUI_COMPACTING_PATTERN_EXPOSER = 17;
 
     // Part-based GUI IDs (require side encoding)
     public static final int GUI_PART_IMPORT_INTERFACE = 100;
@@ -283,6 +287,9 @@ public class CellsGuiHandler implements IGuiHandler {
                     if (part instanceof ICombinedInterfaceHost) {
                         return new ContainerPullPushCard(player.inventory, (ICombinedInterfaceHost) part);
                     }
+                    if (part instanceof IIOInterfaceHost) {
+                        return new ContainerPullPushCard(player.inventory, (IIOInterfaceHost) part);
+                    }
                     break;
 
                 case GUI_PART_COMBINED_IMPORT_INTERFACE:
@@ -363,6 +370,9 @@ public class CellsGuiHandler implements IGuiHandler {
                 if (tile instanceof ICombinedInterfaceHost) {
                     return new ContainerPullPushCard(player.inventory, (ICombinedInterfaceHost) tile);
                 }
+                if (tile instanceof IIOInterfaceHost) {
+                    return new ContainerPullPushCard(player.inventory, (IIOInterfaceHost) tile);
+                }
                 break;
 
             case GUI_EXPORT_INTERFACE:
@@ -388,6 +398,12 @@ public class CellsGuiHandler implements IGuiHandler {
             case GUI_FLUID_IO_INTERFACE:
                 if (tile instanceof IIOInterfaceHost) {
                     return new ContainerIOInterface(player.inventory, tile);
+                }
+                break;
+
+            case GUI_COMPACTING_PATTERN_EXPOSER:
+                if (tile instanceof TileCompactingPatternExposer) {
+                    return new ContainerCompactingPatternExposer(player.inventory, (TileCompactingPatternExposer) tile);
                 }
                 break;
         }
@@ -480,6 +496,9 @@ public class CellsGuiHandler implements IGuiHandler {
                     if (part instanceof ICombinedInterfaceHost) {
                         return new GuiPullPushCard(player.inventory, (ICombinedInterfaceHost) part);
                     }
+                    if (part instanceof IIOInterfaceHost) {
+                        return new GuiPullPushCard(player.inventory, (IIOInterfaceHost) part);
+                    }
                     break;
 
                 case GUI_PART_COMBINED_IMPORT_INTERFACE:
@@ -561,6 +580,9 @@ public class CellsGuiHandler implements IGuiHandler {
                 if (tile instanceof ICombinedInterfaceHost) {
                     return new GuiPullPushCard(player.inventory, (ICombinedInterfaceHost) tile);
                 }
+                if (tile instanceof IIOInterfaceHost) {
+                    return new GuiPullPushCard(player.inventory, (IIOInterfaceHost) tile);
+                }
                 break;
 
             case GUI_EXPORT_INTERFACE:
@@ -586,6 +608,12 @@ public class CellsGuiHandler implements IGuiHandler {
             case GUI_FLUID_IO_INTERFACE:
                 if (tile instanceof IIOInterfaceHost) {
                     return new GuiIOInterface(player.inventory, tile);
+                }
+                break;
+
+            case GUI_COMPACTING_PATTERN_EXPOSER:
+                if (tile instanceof TileCompactingPatternExposer) {
+                    return new GuiCompactingPatternExposer(player.inventory, tile);
                 }
                 break;
         }

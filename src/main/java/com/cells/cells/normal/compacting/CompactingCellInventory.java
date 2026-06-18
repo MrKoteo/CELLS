@@ -145,6 +145,13 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
     private long cachedMaxCapacityInBaseUnits = -1;
 
     /**
+     * Main-tier conversion rate from the chain before a pending tier-card rebuild.
+     * Used to translate storedBaseUnits when the rebuilt chain exposes a different
+     * lowest tier.
+     */
+    private long pendingTierRebuildMainRate = 0;
+
+    /**
      * Set by getSlotForItem() to indicate whether the last match was a direct proto match
      * (true) or an ore dict equivalent match (false). Read by injectItems() to avoid the
      * redundant isDirectMatch() call that would repeat the same areItemsEqual comparison.
@@ -738,6 +745,12 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
         return newTiersUp != cachedTiersUp || newTiersDown != cachedTiersDown;
     }
 
+    private long getMainTierRate() {
+        if (mainTier < 0 || mainTier >= convRate.length) return 0;
+
+        return convRate[mainTier];
+    }
+
     /**
      * Reload chain data from NBT if it has been updated externally,
      * or resize arrays if tier card configuration has changed.
@@ -796,6 +809,7 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
             int newMaxTiers = newTiersUp + 1 + newTiersDown;
 
             // Save current data
+            long previousMainTierRate = getMainTierRate();
             long savedBaseUnits = storedBaseUnits;
             ItemStack savedPartition = cachedPartitionItem.copy();
 
@@ -804,6 +818,7 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
             initializeArrays();
             storedBaseUnits = savedBaseUnits;
             cachedPartitionItem = savedPartition;
+            pendingTierRebuildMainRate = previousMainTierRate;
 
             // Mark chain for rebuild - mainTier = -1 signals that chain needs rebuilding
             // The actual rebuild happens in updateCompressionChainIfNeeded() with World access
@@ -995,11 +1010,13 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
         if (needsTierRebuild) {
             // Save the base units
             long savedBaseUnits = storedBaseUnits;
+            long previousMainTierRate = pendingTierRebuildMainRate;
 
             // Rebuild chain with new tier configuration
             reset();
-            storedBaseUnits = savedBaseUnits;
             initializeCompressionChain(cachedPartitionItem, world);
+            storedBaseUnits = CellMathHelper.rescaleBaseUnits(savedBaseUnits, previousMainTierRate, getMainTierRate());
+            pendingTierRebuildMainRate = 0;
             chainFullyInitialized = mainTier >= 0 && !cachedChainEmpty;
             saveChanges();
 
@@ -1285,6 +1302,7 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
         storedBaseUnits = 0;
         mainTier = -1;
         chainFullyInitialized = false;
+        pendingTierRebuildMainRate = 0;
 
         // Invalidate derived caches
         cachedChainEmpty = true;
@@ -1308,8 +1326,9 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
         // Fast path: if chain is fully initialized and hasn't been replaced externally,
         // skip all the validation checks. The hasChainVersionChanged() check detects when
         // another handler (e.g., Cell Terminal API) has replaced the chain since we loaded it.
+        // Also check if partition has changed - workbench may update partition externally.
         int slot;
-        if (chainFullyInitialized && !hasChainVersionChanged()) {
+        if (chainFullyInitialized && !hasChainVersionChanged() && !hasPartitionChanged()) {
             slot = getSlotForItem(input);
         } else {
             // Slow path: need to initialize or validate the chain
@@ -1391,7 +1410,7 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
     public IAEItemStack extractItems(IAEItemStack request, Actionable mode, IActionSource src) {
         if (request == null || request.getStackSize() <= 0) return null;
 
-        if (!chainFullyInitialized || hasChainVersionChanged()) {
+        if (!chainFullyInitialized || hasChainVersionChanged() || hasPartitionChanged()) {
             // Slow path: need to initialize or validate the chain
             chainFullyInitialized = false;
             reloadFromNBTIfNeeded();
@@ -1430,7 +1449,8 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
     @Override
     public IItemList<IAEItemStack> getAvailableItems(IItemList<IAEItemStack> out) {
         // Reload from NBT if needed, check for tier card changes, or detect external chain replacement
-        if (!chainFullyInitialized || hasChainVersionChanged()) {
+        // Also check for partition changes - workbench may update partition externally.
+        if (!chainFullyInitialized || hasChainVersionChanged() || hasPartitionChanged()) {
             reloadFromNBTIfNeeded();
 
             // If mainTier == -1, the chain needs rebuilding (tier card changed)

@@ -1,0 +1,23 @@
+{
+  "type": "forge:ore_shapeless",
+  "conditions": [
+    {
+      "type": "forge:mod_loaded",
+      "modid": "projectex"
+    }
+  ],
+  "ingredients": [
+     {
+      "item": "appliedenergistics2:material",
+      "data": 27
+    },
+    {
+      "item": "projectex:refined_link"
+    }
+  ],
+  "result": {
+    "item": "cells:emc_capacity_card",
+    "count": 1,
+    "data": 0
+  }
+}

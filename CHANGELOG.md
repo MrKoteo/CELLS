@@ -8,7 +8,102 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Semantic Versioning: https://semver.org/spec/v2.0.0.html
 
 
-## [0.6.0-alpha] - 2026-04-30
+## [0.6.9] - 2077-05-01
+### Fixed
+- Fix all Subnet Proxy issues (as if)
+
+
+## [0.6.3-beta2] - 2026-06-17
+### Fixed
+- Fix crash during complex networks' initialization, due to coordinator's election logic (what determines which proxy should forward which events) triggering chained initializations (re-entering the coordinator's code while it's still initializing).
+- Harden the sources handling of Subnet Proxy against stale sources that could have become null (and crashing the instance).
+
+
+## [0.6.3-beta] - 2026-06-16
+### Added
+- Add textures for IO Interfaces, Compacting Pattern Exposer, Insertion Card, and EMC Cell.
+- Add an EMC Cell reported-amount config in CELLS so the visible stack size no longer depends on ProjectEX's external cap and can be set up to Long.MAX_VALUE.
+- Add targeted Subnet Proxy diagnostics: a rate-limited warning when the proxy detects a failed extract while the item is still listed, plus `/inspectSubnetProxy` to inspect the looked-at proxy's live state and last detected mismatch. Warnings and fault-recording are gated behind an opt-in config, to allow toggling it on only when needed. Faults originate from ghost items or unextractable items, but the exact cause may not come from the proxy itself. Some things may misreport content (e.g., Essentia Storage Bus) or have items that are visible but not extractable (e.g., EMC Link without enough EMC).
+
+### Fixed
+- Fix Subnet Proxy occasionally keeping stale availability after back-grid topology changes, by rebuilding from AE2-active providers and forcing a front-grid refresh when the proxy's published source/election surface actually changes.
+- Fix Subnet Proxy coordinator maybe not properly refreshing after a rebuild, causing diamond topologies to report the same deltas (ghost content). The coordinator is responsible for deciding which proxy should forward which events in a subnet.
+- Fix parallel Subnet Proxies between the same two grids collapsing to one front's channel/filter config; the elected representative now unions direct parallel fronts so visibility no longer depends on which one wins election.
+- Fix Storage Buses exposed by Subnet Proxies being stale after rebuild.
+- Fix partially partitioned Configurable Cells refusing to extract stored items and fluids that were no longer listed in the partition filter.
+
+
+## [0.6.2-alpha3] - 2026-06-06
+### Fixed
+- Fix paged interface tank/storage clicks (pour/fill) using the wrong slot indices, which blocked interacting with page 2+ contents.
+- Fix standalone Essentia Interfaces hiding filters past the first page.
+- Fix some jank interactions with the Configurable Cell's component slots, resulting in voiding components or being able to insert invalid components, in some cases. All cases should be fixed, now.
+- Fix Configurable Cell's warnings/errors using the old translation keys.
+- Remove AE2's hotbar handling (1-9 under F keys) from GUIs, where they may conflict with other numeric fields or keybinds.
+
+
+## [0.6.2-alpha2] - 2026-05-26
+### Added
+- Add JEI recipe transfer support for Import, Export, Universal, and IO interfaces. All interface GUIs expose a shared toggle that saves whether Import interfaces receive recipe inputs or outputs, and IO interfaces route their Import/Export tabs from that same preference.
+- Add JEI recipe transfer support for Creative Cell filters, with the toggle swapping whether JEI adds recipe inputs or outputs.
+- Add the EMC Cell, a ProjectEX-backed AE2 storage cell that exposes partitioned items at a fixed count, converts inserts into buffered EMC, and supports upgrade tiers for larger filter counts.
+
+### Fixed
+- Fix Compacting Cells preserving the raw stored base-unit count when a tier card rebuild changes the chain depth, which caused decompression cards to show too few items after being added to a non-empty cell.
+
+
+## [0.6.2-alpha] - 2026-05-22
+### Added
+- Add a storage-cell component swap recipe that converts one CELLS cell into another CELLS cell family while returning the replaced component, and rejects swaps that would lose contents or leave incompatible upgrades installed.
+- Add the Compacting Pattern Exposer, a block that turns ghost-filtered compacting conversions into instant AE2 processing patterns.
+
+
+## [0.6.1-alpha4] - 2026-05-18
+### Fixed
+- Fix Compacting Cells not properly updating the compacting chain when partitioned again in a Cell Workbench. This is a regression from a previous fix (probably 0.5.13-beta).
+
+### Changed
+- Change the Subnet Proxy's front texture to use the arrow on all sides, instead of just top.
+
+
+## [0.6.1-alpha3] - 2026-05-17
+### Fixed
+- Fix IO/Universal Interface not handling the Network Tool's Toolbox properly.
+- Fix Subnet Proxy having the Network Tool's Toolbox's slots misaligned with the texture.
+
+
+## [0.6.1-alpha2] - 2026-05-08
+### Added
+- Add support for shift-clicking, quick-adding, dragging from JEI, and pouring into interface slots for Recovery Containers (instead of being treated as the orb item).
+- Add interoperability for all the interface types between each others (e.g., you can export the filters of an Item Interface to an Universal Interface or an IO Item Interface, and vice versa). The direction and type must match (will only apply what matches if more than 1 type is supported, e.g., Universal Interface).
+- Add Memory Card support for Subnet Proxy, so they can import filters from AE2 Item/Fluid/Gas/Essentia Storage Buses and other Subnet Proxies.
+
+### Fixed
+- Fix WAILA/TOP status overlays showing Subnet Proxies as offline and Interface blocks with no power/channel state line.
+- Fix the memory card "save filters" shortcut not handling I/O interfaces.
+
+
+## [0.6.1-alpha] - 2026-05-07
+### Added
+- Add a public API for the Subnet Proxy and Interfaces to allow other mods to interact with them without resorting to NBT manipulation or reflection.
+
+### Fixed
+- Fix rare Subnet Proxy deadlock (server tick freeze) when 2 subnet proxies published the same network event at the same time during a full re-build event.
+- (Maybe) Fix Item I/O Interface automation exposing import and export slots on top of each other, which could block pipes from extracting from the export side if it has more items than the import side.
+
+
+## [0.6.0-alpha2] - 2026-05-04
+### Added
+- Add crafting recipes for the Subnet Proxy Back/Front parts, and the Insertion Card upgrade.
+
+### Fixed
+- Fix Subnet Proxy causing severe server-tick lag in chains/diamonds: back-grid cell-array updates no longer force a full re-listing of every cell handler on the front grid. Cell-array updates may be triggered by any change in the back grid (e.g., a storage bus polling, a cell going from full to non-full, etc.).
+- Fix Subnet Proxy gas/essentia deltas not participating in cross-hub UUID dedup: gas and essentia channels now use the same forwarding path as items/fluids, so chained/diamond proxy topologies dedup gas/essentia events identically.
+- Fix Subnet Proxy leaking gas/essentia listener registrations on Grid A monitors when the back grid changes or the proxy is removed.
+- Fix texture of Subnet Proxy in item form.
+
+
+## [0.6.0-alpha] - 2026-05-03
 ### Added
 - Add the Subnet Proxy (front/back), 2 parts that allow to create a unidirectional subnet (passthrough) with optional filtering. The filtering is done in pages, with each capacity card allowing for an additional page of 63 filters. All 4 types are combined in the filter, with a button to cycle which type should be encoded on drag-and-drop/shift-click/quick-add. The Subnet Proxy will only expose the content of the network it is connected to (no showing looping content). The local content is propagated to the connected network + 1 level of subnet proxies, allowing for A -> B -> A -> C -> A setups where C is aware B without looping to A.
 - Subnet Proxy Insertion Card: when installed, the proxy also forwards matching items in the reverse direction (front-grid → back-grid), letting items inserted on the front side be pushed back into the back-grid storage if they pass the filter and priority routing.
@@ -17,10 +112,13 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Add an Essentia Container Blacklist config to specify tile entities by registry ID, preventing the Essentia Interface's Push/Pull card from interacting with buggy containers.
 - Add protective checks for possible null aspects from outside mods in the Essentia Interface, to prevent crashes. This should never happen if the other mods do their job properly, but Thaumcraft addons are known to be all kinds of janky.
 - Add a toggle arrow button before the title in all Interface GUIs to show/hide the Controls Help panel. The visibility state is persisted across sessions.
+- Filter slots (Item/Fluid/Gas/Essentia interfaces and Subnet Proxy) now show the full hover tooltip of the underlying content, matching what JEI shows on hover (including lines added by other mods). Click hints are appended at the bottom. JEI is preferred when loaded; vanilla item tooltips and a display-name fallback are used otherwise.
 
 ### Fixed
 - Fix Memory Card wiping upgrades in the receiving interface when transferring data.
 - Fix Controls Help being able to go out of the screen when the screen is too small, causing a crash.
+- Fix "Add to filter" keybind not working with bookmarks from recent HEI versions.
+- Fix Combined Interfaces in Adaptive Mode not waking up when adding the first filter (e.g. on a freshly-placed Export-side IO Interface), leaving the interface idle until another network event happened.
 
 
 ## [0.5.15-beta] - 2026-04-15

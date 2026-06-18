@@ -18,6 +18,7 @@ The mod requires AE2-UEL. It also has support for:
 - JEI: Import Interface drag-and-drop and quick-add features, Creative Cell drag-and-drop feature, and JEI Cell Preview feature
 - Thaumic Energistics: Configurable Cell components
 - Mekanism Energistics: Configurable Cell components
+- ProjectEX: EMC Cell
 
 ### Why such heavy warnings on increasing number of types?
 Because of limitations in Minecraft and AE2 :
@@ -49,8 +50,8 @@ A two-block multipart that bridges two ME networks together with a configurable,
 - **No looping guarantees**: the proxy network automatically detects and prevents loops, so that looping topologies like `A → B → A` will not cause ghost items or force updates.
 - **No multi-hop guarantees**: the proxy only gives the main network 1-hop visibility into the subnet's local storage, and does not chain through other proxies on the subnet. This means that, with `B → A → C → D`, C will see A and B, but D will not see B's content through A. This prevents events from inflating exponentially in complex subnet topologies, keeping the performance impact manageable.
 - **Up to 25 * 63 filter slots**: the filter is paginated and can be expanded with capacity cards (up to 24 upgrade slots with config), allowing you to share a large portion of a subnet if needed.
-- **On-way or two-way operation**: by default, the proxy is read-only (the main network can see and pull from the subnet, but cannot push back). This design is intentional to spare the network from having *every single single* checking insertions against the filter of every Subnet Proxy, even if they are only intended for exposing content one-way. However, you can add an Insertion Card to the Subnet Proxy that exposes the content to make it two-way, allowing the main network to also push items back into a subnet through the Proxy (still respecting the filter, of course).
-- **Universal resource support**: the same Subnet Proxy works for items, fluids, gases, and essentia. The filter and all operations adapt to the type of the subnet's content. Use the resource type cycling button in the filter GUI to switch between item/fluid/gas/essentia "encoding" modes for the filter slots. The encoding mode has no impact on what the proxy can expose from the subnet, it is only used when actually adding things to the filter.
+- **On-way or two-way operation**: by default, the proxy is read-only (the main network can see and pull from the subnet, but cannot push back). This design is intentional to spare the network from having *every single inserted item* checking insertions against the filter of *every single* Subnet Proxy, even if they are only intended for exposing content one-way. However, you can add an Insertion Card to the Subnet Proxy that exposes the content to make it two-way, allowing the main network to also push items back into a subnet through the Proxy (still respecting the filter, of course).
+- **Universal resource support**: the same Subnet Proxy works for items, fluids, gases, and essentia. Use the Resource Type cycling button in the filter GUI to switch between item/fluid/gas/essentia "encoding" modes for the filter slots. The encoding mode has no impact on what the proxy can expose from the subnet, it is only used when actually adding things to the filter. For controlling what types of resources the proxy exposes, you can use the side buttons to enable/disable channels (default to all disabled, to opt-in to exposing specific channels).
 - **Filtered event forwarding**: the proxy only forwards changes that match the filter, so that the network only sees what you want it to see. This also means that if something changes in the main network but doesn't match any filter, no subnet will see it, and thus no unnecessary updates will be triggered on the subnets' side.
 
 #### What it is
@@ -85,6 +86,12 @@ Common use cases:
 - **Networks stay independent.** The two halves of the proxy do not merge their grids: channel budgets, P2P tunnels, security terminals, and crafting CPUs all stay scoped to their respective networks. Only the filtered storage view crosses the boundary.
 
 
+### Compacting Pattern Exposer
+A block that exposes compression/decompression recipes as processing patterns to the ME network, in the same way as the Compacting Cells (1 up, 1 down). It acts as an alternative to the Compacting Cell, when you need to store the content somewhere else but still want the convenience of automatic compression/decompression.
+Only the set of recipes defined in the GUI is exposed to the network, as to not bloat it or generate conflicting recipes. As AE2 gets confused when 2 recipes produce the same output, the GUI prevents you from adding conflicting recipes.
+By default, the exposed recipe only does 1 action of compression/decompression (e.g. 1 block → 9 ingots) per CPU operation (multiplied by co-processors), but you can change the multiplier on a slot, exposing the recipes as a bigger conversion (e.g. 100 blocks → 900 ingots) to save CPU time at the cost of flexibility.
+
+
 ### Creative Cell (Item, Fluid, Gas, Essentia)
 A cell that can only be set in creative mode, providing 4.6 quintillion of each set slot (up to 63 different items/fluids/gases/essentia per cell). It is the equivalent of a Drawer with the Vending upgrade.
 
@@ -105,6 +112,9 @@ Storage cells that automatically expose compressed and decompressed forms of ite
     - Due to size limitations, the maximum capacity is ~9.2 Quintillion items of the lowest tier. This is mainly an issue with high compression chains (using compression/decompression cards)
 4. **Single Item Type**: Each compacting cell stores only one item type (with its compression variants).
 5. **Storage Counting**: Storage capacity is measured in main tier (partitioned item) units, so no need to worry about conversion factors when checking capacity.
+
+#### Migration from CraftTweaker's Compacting Drawers integration
+- If you are using CraftTweaker's mods.storagedrawers.Compaction.add, you can use [compaction_recipes.py](https://github.com/Aedial/CELLS/blob/main/tools/compaction_recipes.py) to add back-and-forth conversion recipes. The change will be in-place, unless you add the `--dry` flag, in which case the modifications will be printed to the console instead of applied, so you can review them before applying. Conversions will be skipped if they already exist, so you can just add recipes and re-run the script.
 
 #### Available Tiers
 - **1k - 2G Compacting Storage Cells** (normal sizes)
@@ -150,6 +160,11 @@ registry_name@metadata = bytes,channel,tier_name
 - `bytes`: Total byte capacity of the component (e.g. `1024` for 1K)
 - `channel`: `item` or `fluid`
 - `tier_name`: Used for texture selection (e.g. `1k`, `64k`, `1g`)
+
+
+### EMC Cell
+A cell that acts like a Personal EMC Link from ProjectEX, allowing you to convert items to EMC and back. It is the strict equivalent of configured Storage Bus on an EMC Link, allowing in only the items that are whitelisted in the filter, but not with strict matching. The matching rules are the same as the ones for other ProjectEx blocks.
+To spare performance, accumulated EMC is only flushed to the player's network once a second (configurable).
 
 
 ### Upgrades
@@ -230,6 +245,14 @@ Install in a Compacting Cell's upgrade slots to increase the number of compressi
 **Compatible with**: Compacting Cells
 
 
+#### Refined/Compressed EMC Cards
+Install in an EMC Cell to increase the number of partition slots the cell can hold, in the same way as the Personal/Refined/Compressed EMC Links. The number of slots is configurable per card in the config, and you can even add more cards with a possibly infinite number of slots by adding custom entries in the config file, but you will need to provide textures and localization for them yourself. The first value in the config entry is the default number of slots without card.
+- **Refined EMC Card**: 9 slots by default
+- **Compressed EMC Card**: 54 slots by default
+
+**Compatible with**: EMC Cell
+
+
 ## Configuration
 
 The mod includes a server-side configuration file with an in-game GUI editor:
@@ -280,4 +303,5 @@ Show the available slots from the block the player is looking at.
 ## Credits
 - Chinese translation: @ZHAY10086
 - Russian translation: @MrKoteo
-- Hyper-Density Item/Fluid Cells'/Cell Components' textures: ArchEzekiel
+- Hyper-Density Item/Fluid Cells'/Cell Components' textures: @ArchEzekiel
+- EMC Cell's, Compacting Pattern Exposer's, insertion card's textures: @NerdySpider

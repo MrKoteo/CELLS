@@ -1,6 +1,7 @@
 package com.cells.blocks.combinedinterface;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.annotation.Nonnull;
@@ -35,6 +36,7 @@ import com.cells.blocks.interfacebase.AbstractResourceInterfaceLogic;
 import com.cells.blocks.interfacebase.IInterfaceLogic;
 import com.cells.blocks.interfacebase.IResourceInterfaceLogic;
 import com.cells.blocks.interfacebase.ISizeOverrideContainer;
+import com.cells.gui.IToolboxContainer;
 import com.cells.gui.overlay.ServerMessageHelper;
 import com.cells.network.CellsNetworkHandler;
 import com.cells.network.packets.PacketSyncSlotSizeOverride;
@@ -59,7 +61,8 @@ import com.cells.network.sync.ResourceType;
  * {@link IResourceInterfaceLogic} accessors.
  */
 public class ContainerCombinedInterface extends AEBaseContainer
-        implements IResourceSyncContainer, IQuickAddFilterContainer, IStorageSyncContainer, ISizeOverrideContainer {
+    implements IResourceSyncContainer, IQuickAddFilterContainer, IStorageSyncContainer, ISizeOverrideContainer,
+    IToolboxContainer {
 
     private final ICombinedInterfaceHost host;
 
@@ -653,6 +656,24 @@ public class ContainerCombinedInterface extends AEBaseContainer
         return true;
     }
 
+    @SuppressWarnings("rawtypes")
+    public void addRecipeTransferSilently(@Nonnull Map<ResourceType, List<Object>> resourcesByType) {
+        for (Map.Entry<ResourceType, List<Object>> entry : resourcesByType.entrySet()) {
+            IInterfaceLogic logic = this.host.getLogicForType(entry.getKey());
+            if (!(logic instanceof IResourceInterfaceLogic)) continue;
+
+            IResourceInterfaceLogic rawLogic = (IResourceInterfaceLogic) logic;
+            boolean changed = false;
+
+            for (Object resource : entry.getValue()) {
+                if (!tryAddToFilter(rawLogic, logic, resource, this.host.isExport())) continue;
+                changed = true;
+            }
+
+            if (changed) logic.refreshFilterMap();
+        }
+    }
+
     @Override
     public String getTypeLocalizationKey() {
         ResourceType tab = this.host.getActiveTab();
@@ -661,7 +682,12 @@ public class ContainerCombinedInterface extends AEBaseContainer
 
     @SuppressWarnings("rawtypes")
     private int findFirstAvailableSlot(IResourceInterfaceLogic rawLogic, boolean isExport) {
-        final int effectiveSlots = getActiveLogic().getEffectiveFilterSlots();
+        return findFirstAvailableSlot(getActiveLogic(), rawLogic, isExport);
+    }
+
+    @SuppressWarnings("rawtypes")
+    private int findFirstAvailableSlot(IInterfaceLogic logic, IResourceInterfaceLogic rawLogic, boolean isExport) {
+        final int effectiveSlots = logic.getEffectiveFilterSlots();
 
         for (int i = 0; i < effectiveSlots; i++) {
             Object existing = rawLogic.getFilter(i);
@@ -673,6 +699,34 @@ public class ContainerCombinedInterface extends AEBaseContainer
         }
 
         return -1;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private boolean tryAddToFilter(
+            IResourceInterfaceLogic rawLogic,
+            IInterfaceLogic logic,
+            Object resource,
+            boolean isExport) {
+        if (resource == null) return false;
+        if (containsResource(rawLogic, logic, resource)) return false;
+
+        int slot = findFirstAvailableSlot(logic, rawLogic, isExport);
+        if (slot < 0) return false;
+
+        rawLogic.setFilter(slot, resource);
+        return true;
+    }
+
+    @SuppressWarnings("rawtypes")
+    private boolean containsResource(IResourceInterfaceLogic rawLogic, IInterfaceLogic logic, Object resource) {
+        final int effectiveSlots = logic.getEffectiveFilterSlots();
+
+        for (int i = 0; i < effectiveSlots; i++) {
+            Object existing = rawLogic.getFilter(i);
+            if (existing != null && existing.equals(resource)) return true;
+        }
+
+        return false;
     }
 
     // ================================= Storage Interaction =================================

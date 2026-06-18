@@ -60,4 +60,8 @@ dependencies {
     // ---- Optional: Mekanism Energistics ----
     devOnlyNonPublishable rfg.deobf("curse.maven:mekanism-ce-399904:7660563")
     devOnlyNonPublishable rfg.deobf("curse.maven:mekanism-energistics-1027681:5775101")
+
+    // ---- Optional: ProjectEZ ----
+    devOnlyNonPublishable rfg.deobf("curse.maven:projecte-226410:2702991")
+    devOnlyNonPublishable rfg.deobf("curse.maven:mbc-projectez-1354265:7262762")
 }

@@ -15,6 +15,8 @@ import appeng.api.storage.IStorageChannel;
 import appeng.api.storage.data.IAEStack;
 import appeng.api.storage.data.IItemList;
 
+import com.cells.config.CellsConfig;
+
 
 /**
  * Filtered, read-only passthrough handler for the Subnet Proxy.
@@ -109,6 +111,31 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
         this.localCells = cells != null ? cells : Collections.emptyList();
     }
 
+    /**
+     * Stable identity hash of the current local-cell set, ignoring iteration order.
+     * Used by the front part to detect structural source changes without scanning
+     * full contents.
+     */
+    int getLocalCellIdentityHash() {
+        if (this.localCells.isEmpty()) return 0;
+
+        List<Integer> ids = new ArrayList<>(this.localCells.size());
+        for (IMEInventoryHandler<T> cell : this.localCells) {
+            ids.add(System.identityHashCode(cell));
+        }
+
+        Collections.sort(ids);
+
+        int hash = 1;
+        for (int id : ids) hash = 31 * hash + id;
+
+        return hash;
+    }
+
+    int getLocalCellCount() {
+        return this.localCells.size();
+    }
+
     /** Clear all sources (Grid A unavailable). */
     public void clearSources() {
         this.localCells = Collections.emptyList();
@@ -121,6 +148,29 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
     /** @return the current filter predicate, or null if no filter is set (allow all) */
     public Predicate<T> getFilter() {
         return this.filter;
+    }
+
+    private void ensureFiltersCurrent() {
+        if (this.frontPart != null) this.frontPart.ensureFiltersCurrent();
+    }
+
+    private boolean isReadChannelExposed() {
+        return this.frontPart == null || this.frontPart.isReadChannelExposed(this.channel);
+    }
+
+    private Predicate<T> getVisibleFilter() {
+        this.ensureFiltersCurrent();
+        if (this.frontPart == null) return this.filter;
+
+        return this.frontPart.buildVisibleReadFilter(this.channel, this.filter);
+    }
+
+    boolean matchesVisibleStack(T stack) {
+        if (stack == null) return false;
+        if (!this.isReadChannelExposed()) return false;
+
+        Predicate<T> visibleFilter = this.getVisibleFilter();
+        return visibleFilter == null || visibleFilter.test(stack);
     }
 
     // ========================= Snapshot / Monitor for Delta Forwarding =========================
@@ -148,13 +198,22 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
      * @return true if at least one item in {@code changes} matches the filter (or no filter is set)
      */
     public boolean matchesAny(Iterable<T> changes) {
-        if (this.filter == null) return true;
+        if (!this.isReadChannelExposed()) return false;
 
         for (T change : changes) {
-            if (this.filter.test(change)) return true;
+            if (this.matchesVisibleStack(change)) return true;
         }
 
         return false;
+    }
+
+    /**
+     * Own local cells are only publishable when this front is the elected
+     * publisher for its back-grid on its front-grid. Without this gate,
+     * duplicate same-origin fronts can both expose the same inventory surface.
+     */
+    private boolean shouldExposeLocalCells() {
+        return this.frontPart == null || this.frontPart.shouldExposeOwnOrigin();
     }
 
     // ========================= IMEInventory =========================
@@ -172,7 +231,7 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
         // 2+-hop passthrough item), we must not extract it either, otherwise
         // I/O becomes inconsistent with the reported inventory.
         if (request == null) return null;
-        if (this.filter != null && !this.filter.test(request)) return null;
+        if (!this.matchesVisibleStack(request)) return null;
 
         long remaining = request.getStackSize();
         if (remaining <= 0) return null;
@@ -185,19 +244,21 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
         // Sort by cell priority desc so AE2's per-cell priority is honored
         // even within this aggregating handler. AE2 itself extracts highest
         // priority first; we mirror that here for cells living under us.
-        for (IMEInventoryHandler<T> cell : sortedByPriorityDesc(this.localCells)) {
-            if (remaining <= 0) break;
+        if (shouldExposeLocalCells()) {
+            for (IMEInventoryHandler<T> cell : sortedByPriorityDesc(this.localCells)) {
+                if (remaining <= 0) break;
 
-            T sub = request.copy();
-            sub.setStackSize(remaining);
-            T got = cell.extractItems(sub, type, src);
-            if (got == null || got.getStackSize() <= 0) continue;
+                T sub = request.copy();
+                sub.setStackSize(remaining);
+                T got = cell.extractItems(sub, type, src);
+                if (got == null || got.getStackSize() <= 0) continue;
 
-            remaining -= got.getStackSize();
-            if (extracted == null) {
-                extracted = got;
-            } else {
-                extracted.incStackSize(got.getStackSize());
+                remaining -= got.getStackSize();
+                if (extracted == null) {
+                    extracted = got;
+                } else {
+                    extracted.incStackSize(got.getStackSize());
+                }
             }
         }
 
@@ -208,7 +269,7 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
             T peerRequest = request.copy();
             peerRequest.setStackSize(remaining);
             T fromPeers = this.frontPart.extractFromPeerLocals(
-                peerRequest, type, src, this.channel, this.filter);
+                peerRequest, type, src, this.channel, this::matchesVisibleStack);
 
             if (fromPeers != null && fromPeers.getStackSize() > 0) {
                 remaining -= fromPeers.getStackSize();
@@ -220,12 +281,29 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
             }
         }
 
+        // Cannot report any faults in the following cases, so skip the probe
+        if (type != Actionable.MODULATE || remaining <= 0 || this.frontPart == null) return extracted;
+
+        // Skip the visibility probe if disabled, so we avoid the scan overhead and warning logs
+        if (!CellsConfig.subnetProxyReportExtractionFaults) return extracted;
+
+        // Some callers may request more than visible amount (without doing SIMULATE first),
+        // so we ignore mismatches in the other direction. They are normal and expected.
+        // It *can* still be a fault, but we have no way of differentiating that from a normal request.
+        long visibleAmount = this.getVisibleAmount(request);
+        if (visibleAmount > 0) {
+            this.frontPart.recordExtractionMismatch(this.channel, request, extracted, visibleAmount, type);
+        }
+
         return extracted;
     }
 
     @Override
     public IItemList<T> getAvailableItems(final IItemList<T> out) {
-        // 1) Local back-grid items (always exposed, subject to filter).
+        if (!this.isReadChannelExposed()) return out;
+
+        // 1) Local back-grid items, but only when this front is the elected
+        // publisher for its own origin on the current front-grid.
         appendLocalAvailableItems(out);
 
         // 2) Peer aggregation (1-hop): for each peer front on our back-grid
@@ -234,7 +312,7 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
         // then by us). This gives chained visibility (B → A → C makes B's
         // items visible from C) while electing dedups diamond topologies.
         if (this.frontPart != null) {
-            this.frontPart.appendPeerItemsForListing(out, this.channel, this.filter);
+            this.frontPart.appendPeerItemsForListing(out, this.channel, this::matchesVisibleStack);
         }
 
         return out;
@@ -248,24 +326,38 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
      * potentially loop).
      */
     public IItemList<T> appendLocalAvailableItems(final IItemList<T> out) {
+        if (!shouldExposeLocalCells()) return out;
+        if (!this.isReadChannelExposed()) return out;
+
+        Predicate<T> visibleFilter = this.getVisibleFilter();
+
         // List from local cells only (not the full monitor) to prevent subnet
         // loop inflation. Items that Grid A sees through passthrough storage buses
         // (storage bus → ME Interface) are NOT listed here, which breaks feedback
         // loops like A→B→proxy→A.
-        if (this.filter == null) {
+        if (visibleFilter == null) {
             // No filter: write directly into output list, zero extra allocations
             for (IMEInventoryHandler<T> cell : this.localCells) {
                 cell.getAvailableItems(out);
             }
         } else {
-            // Filtered: need a temporary list per cell to apply the predicate,
-            // since cells write additively into the output and we can't undo.
+            // Filtered: allocate a single reusable scratch list and clear it
+            // between cells via resetStatus(). Cells write additively, so we
+            // can't filter in-place against {@code out}; the scratch list is
+            // the minimum viable indirection. resetStatus() zeros stack sizes
+            // so AE2 will not re-iterate them.
+            IItemList<T> scratch = null;
             for (IMEInventoryHandler<T> cell : this.localCells) {
-                IItemList<T> cellItems = this.channel.createList();
-                cell.getAvailableItems(cellItems);
+                if (scratch == null) {
+                    scratch = this.channel.createList();
+                } else {
+                    scratch.resetStatus();
+                }
+                cell.getAvailableItems(scratch);
 
-                for (T item : cellItems) {
-                    if (this.filter.test(item)) out.add(item);
+                for (T item : scratch) {
+                    if (item.getStackSize() <= 0) continue;
+                    if (visibleFilter.test(item)) out.add(item);
                 }
             }
         }
@@ -286,7 +378,11 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
      */
     public T extractFromLocalCells(final T request, final Actionable type, final IActionSource src) {
         if (request == null) return null;
-        if (this.filter != null && !this.filter.test(request)) return null;
+        if (!shouldExposeLocalCells()) return null;
+        if (!this.isReadChannelExposed()) return null;
+
+        Predicate<T> visibleFilter = this.getVisibleFilter();
+        if (visibleFilter != null && !visibleFilter.test(request)) return null;
 
         long remaining = request.getStackSize();
         if (remaining <= 0) return null;
@@ -328,6 +424,14 @@ public class SubnetProxyInventoryHandler<T extends IAEStack<T>> implements IMEIn
         List<IMEInventoryHandler<T>> sorted = new ArrayList<>(cells);
         sorted.sort(Comparator.comparingInt(IMEInventoryHandler<T>::getPriority).reversed());
         return sorted;
+    }
+
+    private long getVisibleAmount(T request) {
+        IItemList<T> visible = this.channel.createList();
+        this.getAvailableItems(visible);
+
+        T visibleStack = visible.findPrecise(request);
+        return visibleStack == null ? 0 : visibleStack.getStackSize();
     }
 
     // ========================= IMEInventoryHandler =========================

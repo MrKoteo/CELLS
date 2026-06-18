@@ -86,13 +86,17 @@ public abstract class AbstractCreativeCellFilterHandler<T, K> {
      */
     protected abstract boolean isStackEmpty(@Nullable T stack);
 
-    public int getSlots() {
+    protected int getSlotCount() {
         return SLOT_COUNT;
+    }
+
+    public int getSlots() {
+        return getSlotCount();
     }
 
     @Nullable
     public T getStackInSlot(int slot) {
-        if (slot < 0 || slot >= SLOT_COUNT) return null;
+        if (slot < 0 || slot >= getSlotCount()) return null;
 
         NBTTagCompound cellNBT = Platform.openNbtData(cellStack);
         NBTTagList filters = cellNBT.getTagList(getNBTKey(), Constants.NBT.TAG_COMPOUND);
@@ -123,7 +127,7 @@ public abstract class AbstractCreativeCellFilterHandler<T, K> {
     }
 
     public void setStackInSlot(int slot, @Nullable T stack) {
-        if (slot < 0 || slot >= SLOT_COUNT) return;
+        if (slot < 0 || slot >= getSlotCount()) return;
 
         NBTTagCompound cellNBT = Platform.openNbtData(cellStack);
         NBTTagList filters = cellNBT.getTagList(getNBTKey(), Constants.NBT.TAG_COMPOUND);

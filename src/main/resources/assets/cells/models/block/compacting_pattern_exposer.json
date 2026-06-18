@@ -1,0 +1,8 @@
+{
+    "parent": "block/cube_bottom_top",
+    "textures": {
+        "top": "cells:blocks/compacting_pattern_exposer_top",
+        "side": "cells:blocks/compacting_pattern_exposer_side",
+        "bottom": "cells:blocks/compacting_pattern_exposer_side"
+    }
+}

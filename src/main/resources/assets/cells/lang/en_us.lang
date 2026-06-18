@@ -9,6 +9,7 @@ tooltip.cells.type.hyperdensity=Hyper-Density ME Storage Cell
 tooltip.cells.type.hyperdensity_compact=Hyper-Density ME Compacting Cell
 tooltip.cells.type.import_interface=Import Interface (all types)
 tooltip.cells.type.export_interface=Export Interface (all types)
+tooltip.cells.type.emc=EMC Cell
 tooltip.cells.nbt_size=NBT Size: %s
 tooltip.cells.nbt_size.warning=§c⚠ NBT size exceeds safe limit! This may cause lag or crashes. Move some NBT-heavy content to another chunk and network to avoid corruption.§r
 tooltip.cells.previous_page=Previous page
@@ -49,7 +50,8 @@ cells.max_slot_size.tooltip=Maximum %s to keep in the slots.
 cells.slot_size_override.title=Max Slot Size (slot %d)
 cells.slot_size_override.clear_hint=Clear the field to reset override
 cells.slot_size_override.using_global=global
-cells.filter_slot.hint.left_click=Left-click to set/clear
+cells.filter_slot.hint.left_click_1=Left-click with an item to set
+cells.filter_slot.hint.left_click_2=Left-click with empty hand to clear
 cells.filter_slot.hint.right_click=Right-click to override max slot size
 cells.polling_rate.title=Polling Rate
 cells.polling_rate.adaptive=Polling Rate: Adaptive
@@ -69,6 +71,15 @@ tooltip.cells.clear_filters.all=Clear all filter slots
 # Controls help toggle button
 tooltip.cells.controls_help.show=Show Controls Help
 tooltip.cells.controls_help.hide=Hide Controls Help
+tooltip.cells.recipe_transfer.title=JEI Recipe Transfer
+tooltip.cells.recipe_transfer.mapping1=Import Interface -> %s
+tooltip.cells.recipe_transfer.mapping2=Export Interface -> %s
+tooltip.cells.recipe_transfer.current= §a(You are here)§r
+tooltip.cells.recipe_transfer.click_to_swap=Decides which part of a recipe goes into the filters when clicking '+' in JEI, depending on the interface type. Click to swap interface routing.
+tooltip.cells.recipe_transfer.creative_selection=Clicking '+' in JEI adds %s§7 to this filter.
+tooltip.cells.recipe_transfer.creative_click_to_swap=Click to swap between adding recipe inputs and recipe outputs.
+cells.recipe_component.inputs=JEI §bInputs§r
+cells.recipe_component.outputs=JEI §bOutputs§r
 
 # Messages
 message.cells.disassemble_fail_content=Cannot disassemble cell with content! Empty the cell first.
@@ -79,6 +90,7 @@ message.cells.filters_not_added=%d filter(s) could not be added (no empty slots)
 message.cells.storage_not_empty=Cannot change filter while the storage slot is not empty.
 message.cells.no_filter_space=No free filter slots available.
 message.cells.creative_cell.not_valid_content=Not a valid %s!
+message.cells.compacting_pattern_exposer.filter_conflict=This filter would create a conflicting compacting recipe chain.
 message.cells.polling_rate_delayed=§ePolling rate saved but will take effect after next grid connection.§r
 
 # Config (GUI)
@@ -118,6 +130,12 @@ cells.config.hdFluidCellUpgradeSlots=HD Fluid Cells Upgrade Slots
 cells.config.hdFluidCellUpgradeSlots.tooltip=Number of upgrade slots for hyper-density fluid cells (1-16)
 cells.config.configurableCellUpgradeSlots=Configurable Cells Upgrade Slots
 cells.config.configurableCellUpgradeSlots.tooltip=Number of upgrade slots for configurable cells (1-16)
+cells.config.emcCellSyncIntervalTicks=EMC Cell Sync Interval
+cells.config.emcCellSyncIntervalTicks.tooltip=Server tick interval between buffered EMC flushes to the bound player/team EMC pool (1-72000)
+cells.config.emcCellReportedAmount=EMC Cell Reported Amount
+cells.config.emcCellReportedAmount.tooltip=Reported stack size for learned EMC Cell filters. Uses a positive non-zero number up to 9.2 quintillion (Long.MAX_VALUE). Invalid values fall back to the default of 2147483647.
+cells.config.emcCellPartitionSlots=EMC Cell Partition Slots
+cells.config.emcCellPartitionSlots.tooltip=Unlocked partition slots for EMC cell tiers. Index 0 is the base cell with no upgrade. Each following value applies to EMC Upgrade 1, EMC Upgrade 2, and so on.
 
 ## Config: Misc
 cells.config.enableEssentiaCreativeCellFix=Enable Essentia Creative Cell Fix
@@ -226,6 +244,20 @@ item.cells.decompression_tier_card.9x.name=Decompression Tier Card (9x)
 item.cells.decompression_tier_card.12x.name=Decompression Tier Card (12x)
 item.cells.decompression_tier_card.15x.name=Decompression Tier Card (15x)
 tooltip.cells.decompression_tier_card.desc=Enables up to %d decompression tiers. For best performance, use the lowest tier you can.
+
+# EMC Cell
+item.cells.emc_cell.name=EMC ME Storage Cell
+item.cells.emc_capacity_card.tier1.name=Refined EMC Upgrade
+item.cells.emc_capacity_card.tier2.name=Compressed EMC Upgrade
+tooltip.cells.emc_cell.info=Bound EMC storage cell. Exposes learned partition items at a fixed count and converts accepted inserts into EMC.
+tooltip.cells.emc_cell.slots=Partition slots: %s
+tooltip.cells.emc_cell.owner=Bound to: %s
+tooltip.cells.emc_cell.unbound=Unbound: re-insert it to bind it to a player
+tooltip.cells.emc_cell.buffered=Buffered EMC: %s
+tooltip.cells.emc_cell.unlearned=Unlearned partition filters: %s
+tooltip.cells.emc_cell.unlearned_hint=Hold Shift to list blocked filters
+tooltip.cells.emc_capacity_card.desc=Allows the Cell to provide %s different partitioned items
+
 
 # Hyper-Density Cells (1k-1G max, each displayed byte represents ~2.1B actual storage)
 item.cells.hyper_density_cell.1k.name=1k Hyper-Density ME Storage Cell
@@ -407,6 +439,7 @@ tile.cells.io_interface.name=I/O Interface
 tile.cells.io_interface.fluid.name=Fluid I/O Interface
 tile.cells.io_interface.gas.name=Gas I/O Interface
 tile.cells.io_interface.essentia.name=Essentia I/O Interface
+tile.cells.compacting_pattern_exposer.name=Compacting Pattern Exposer
 
 item.cells.part.import_interface.name=Import Interface
 item.cells.part.import_fluid_interface.name=Fluid Import Interface
@@ -434,6 +467,12 @@ cells.export_interface.gas.title=Gas Export Interface
 cells.export_interface.essentia.title=Essentia Export Interface
 cells.import_interface.combined.title=Universal Import Interface
 cells.export_interface.combined.title=Universal Export Interface
+cells.compacting_pattern_exposer.title=Compacting Pattern Exposer
+cells.compacting_pattern_exposer.multiplier.title=Pattern Multiplier (slot %d)
+cells.compacting_pattern_exposer.multiplier.applies=Multplies both patterns
+cells.compacting_pattern_exposer.multiplier.max=Max: %s
+cells.compacting_pattern_exposer.multiplier.tooltip=Pattern multiplier: §2%s
+cells.compacting_pattern_exposer.filter.hint.right_click=Right-click to edit pattern multiplier
 
 # Info tooltips for block items
 ## Item interfaces (hardcoded in BlockImportInterface/BlockExportInterface)
@@ -454,6 +493,10 @@ tooltip.cells.io_interface.info=Imports/Exposes items to/from the ME network thr
 tooltip.cells.io_interface.fluid.info=Imports/Exposes fluids to/from the ME network through a single block. Automatic I/O is done though Push/Pull Cards.
 tooltip.cells.io_interface.gas.info=Imports/Exposes gas to/from the ME network through a single block. Automatic I/O is done though Push/Pull Cards.
 tooltip.cells.io_interface.essentia.info=Imports/Exposes essentia to/from the ME network through a single block. Automatic I/O is done though Push/Pull Cards.
+tooltip.cells.compacting_pattern_exposer.info=Expose compacting and decompacting conversions as instant AE2 processing patterns using ghost item filters.
+
+cells.compacting_pattern_exposer.result.up=Compresses §b%s§r input item(s) into §a%s§r output item(s).
+cells.compacting_pattern_exposer.result.down=Decompresses §b%s§r input item(s) into §a%s§r output item(s).
 
 # IO Interface direction tab labels
 cells.direction.import=Import
@@ -550,6 +593,7 @@ tooltip.cells.push_card.desc=§7Allows Export Interfaces to push §b%s§7 items/
 tooltip.cells.push_pull_card.limit.desc=§7Keeps §b%s§7 items/mB/etc. of each type in the adjacent inventory (no more, no less).
 tooltip.cells.push_pull_card.interval_warning=Interval lower than 1s may cause performance issues.
 tooltip.cells.push_pull_card.polling_rate_warning=Set the interface's polling rate as a multiple of interval for best results. Unaligned timings may cause delays in either.
+tooltip.cells.push_pull_card.only_filtered_slots=§eThis card §oonly§r§e works with filtered slots!
 cells.push_pull_card.interval.title=Time Interval:
 cells.push_pull_card.interval.tooltip=How often the card performs a transfer operation.
 cells.push_pull_card.quantity.title=Transfer Quantity:
@@ -559,7 +603,7 @@ cells.push_pull_card.limit.tooltip=How many items/mB/etc. of each type to mainta
 
 # Insertion Card (Subnet Proxy upgrade)
 item.cells.insertion_card.name=Insertion Card
-tooltip.cells.insertion_card.desc=§7Enables inserting content back through the Subnet Proxy. Populate the filter to avoid inserting unwanted content.
+tooltip.cells.insertion_card.desc=§7Enables inserting content back through the Subnet Proxy (opposite direction). Populate the proxy's filter to avoid inserting unwanted content.
 tooltip.cells.type.subnet_proxy=Subnet Proxy
 
 # Pull/Push Upgrade Button (interface GUI)
@@ -596,15 +640,34 @@ commands.cells.inspect_slots.unknown_fluid=§cUnknown fluid: %s
 commands.cells.inspect_slots.unknown_gas=§cUnknown gas: %s
 commands.cells.inspect_slots.unknown_aspect=§cUnknown aspect: %s
 
+# /inspectSubnetProxy Command
+commands.cells.inspect_subnet_proxy.usage=/inspectSubnetProxy
+commands.cells.inspect_subnet_proxy.no_proxy=Look at a Subnet Proxy front or back part.
+commands.cells.inspect_subnet_proxy.no_front=§cThe looked-at back proxy is not paired with a front part.
+commands.cells.inspect_subnet_proxy.front_header=§6Subnet Proxy Front at [%d, %d, %d] dim %d (%s) side %s
+commands.cells.inspect_subnet_proxy.back_header=§6Subnet Proxy Back at [%d, %d, %d] dim %d (%s) side %s
+commands.cells.inspect_subnet_proxy.linked_front=§7Linked front: [%d, %d, %d] side %s
+commands.cells.inspect_subnet_proxy.state=§7State: powered=%s active=%s paired=%s ownOriginVisible=%s structureHash=%s
+commands.cells.inspect_subnet_proxy.channels=§7Channels: enabled=%s priority=%d insertionCard=%s insertionExposed=%s filterMode=%s fuzzy=%s inverter=%s
+commands.cells.inspect_subnet_proxy.grids=§7Grids: front=%s back=%s exposedOrigins=%d visiblePeers=%d/%d localCells[item=%d fluid=%d gas=%d essentia=%d]
+commands.cells.inspect_subnet_proxy.last_fault.none=§7Last fault: none recorded.
+commands.cells.inspect_subnet_proxy.last_fault=§eLast fault: tick=%d occurrences=%d channel=%s request=%s requested=%d extracted=%d visibleNow=%d action=%s structureHash=%s
+
 # Subnet Proxy
 item.cells.part.subnet_proxy_back.name=ME Subnet Proxy (Back)
 item.cells.part.subnet_proxy_front.name=ME Subnet Proxy (Front)
 item.cells.part.subnet_proxy_back.tooltip=Place the front part on the back part to create a Subnet, which allows connecting multiple ME networks together.
 item.cells.part.subnet_proxy_front.tooltip=Place the back part on the front part to create a Subnet, which allows connecting multiple ME networks together.
 item.cells.part.subnet_proxy_direction.tooltip=Content flows from the back part to the front part. Make sure to place them in the correct orientation.
+item.cells.part.subnet_proxy_filters.tooltip=You can add filters to the proxy via the Quick Add keybind, JEI dragging, or JEI recipe fill-in ('+' button).
 gui.cells.subnet_proxy.title=Subnet Proxy
 gui.cells.subnet_proxy.filter_mode=Filter Mode: %s
 gui.cells.subnet_proxy.filter_mode.description=When adding a filter, it will be converted to this type.
+gui.cells.subnet_proxy.channel_toggle.enabled=%s channel: §aEnabled
+gui.cells.subnet_proxy.channel_toggle.disabled=%s channel: §cDisabled
+gui.cells.subnet_proxy.channel_toggle.description=Click to toggle. Disabled channels are not exposed to the front network at all (no extraction, no insertion, no events).
+gui.cells.subnet_proxy.no_channels_warning.line1=No channels enabled!
+gui.cells.subnet_proxy.no_channels_warning.line2=Enable at least one channel on the left to expose contents. The Subnet Proxy does not do anything without at least one channel enabled.
 chat.cells.subnet_proxy.need_front=The back part needs to be placed on a front part.
 chat.cells.subnet_proxy.need_back=The front part needs to be placed on a back part.
 cells.config.subnetProxyUpgradeSlots=Subnet Proxy Upgrade Slots
@@ -613,3 +676,5 @@ cells.config.subnetProxyMinTickRate=Subnet Proxy Min Tick Rate
 cells.config.subnetProxyMinTickRate.tooltip=Minimum tick rate for the Subnet Proxy (lower = more responsive, 1-200)
 cells.config.subnetProxyMaxTickRate=Subnet Proxy Max Tick Rate
 cells.config.subnetProxyMaxTickRate.tooltip=Maximum tick rate for the Subnet Proxy when idle (1-1200)
+cells.config.subnetProxyReportExtractionFaults=Subnet Proxy Fault Reporting
+cells.config.subnetProxyReportExtractionFaults.tooltip=Enable Subnet Proxy extraction-fault reporting and warning logs. A reported fault may come from the proxy, a connected inventory, or the network itself, including ghost or unextractable items.

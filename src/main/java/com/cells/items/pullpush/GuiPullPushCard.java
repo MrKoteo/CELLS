@@ -22,6 +22,7 @@ import com.cells.Tags;
 import com.cells.blocks.combinedinterface.ICombinedInterfaceHost;
 import com.cells.blocks.interfacebase.IFilterableInterfaceHost;
 import com.cells.blocks.interfacebase.IInterfaceHost;
+import com.cells.blocks.iointerface.IIOInterfaceHost;
 import com.cells.network.CellsNetworkHandler;
 import com.cells.network.packets.PacketOpenGui;
 import com.cells.network.packets.PacketSetPullPushKeepQuantity;
@@ -114,6 +115,20 @@ public class GuiPullPushCard extends AEBaseGui implements ContainerPullPushCard.
      * Includes a back button to return to the combined interface GUI.
      */
     public GuiPullPushCard(final InventoryPlayer inventoryPlayer, final ICombinedInterfaceHost host) {
+        super(new ContainerPullPushCard(inventoryPlayer, host));
+        this.xSize = 176;
+        this.ySize = 156;
+        this.isImport = ((ContainerPullPushCard) this.inventorySlots).isPullCard();
+        this.interfaceHost = host;
+    }
+
+    /**
+     * I/O Interface mode: opened from an Item/Fluid/Gas/Essentia I/O Interface
+     * GUI via the Pull/Push upgrade button. Like {@link ICombinedInterfaceHost},
+     * I/O hosts can't implement {@link IFilterableInterfaceHost} due to type
+     * erasure on its generics, so they need their own constructor.
+     */
+    public GuiPullPushCard(final InventoryPlayer inventoryPlayer, final IIOInterfaceHost host) {
         super(new ContainerPullPushCard(inventoryPlayer, host));
         this.xSize = 176;
         this.ySize = 156;
@@ -354,8 +369,6 @@ public class GuiPullPushCard extends AEBaseGui implements ContainerPullPushCard.
 
     @Override
     protected void keyTyped(final char character, final int key) throws IOException {
-        if (this.checkHotbarKeys(key)) return;
-
         // Determine which text field is focused (if any)
         GuiTextField activeField = null;
         if (this.quantityField.isFocused()) {
@@ -375,12 +388,12 @@ public class GuiPullPushCard extends AEBaseGui implements ContainerPullPushCard.
             if (this.quantityField.isFocused()) {
                 this.quantityField.setFocused(false);
                 this.keepsField.setFocused(true);
-            } else {
+                return;
+            } else if (this.keepsField.isFocused()) {
                 this.keepsField.setFocused(false);
                 this.quantityField.setFocused(true);
+                return;
             }
-
-            return;
         }
 
         // Commas are virtual (auto-formatted), so we need to skip over them when
