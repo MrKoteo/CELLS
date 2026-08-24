@@ -1,0 +1,23 @@
+{
+    "type": "forge:ore_shapeless",
+    "conditions": [
+        {
+            "type": "forge:mod_loaded",
+            "modid": "thaumicenergistics"
+        }
+    ],
+    "ingredients": [
+        {
+            "item": "cells:essentia_part",
+            "data": 0
+        },
+        {
+            "item": "cells:essentia_part",
+            "data": 1
+        }
+    ],
+    "result": {
+        "item": "cells:essentia_part",
+        "data": 2
+    }
+}

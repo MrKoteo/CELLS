@@ -1,0 +1,17 @@
+{
+    "type": "forge:ore_shapeless",
+    "ingredients": [
+        {
+            "item": "cells:part",
+            "data": 1
+        },
+        {
+            "item": "cells:part",
+            "data": 3
+        }
+    ],
+    "result": {
+        "item": "cells:part",
+        "data": 7
+    }
+}

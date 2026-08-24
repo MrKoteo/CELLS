@@ -27,6 +27,9 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Fix Subnet Proxy not properly initializing when adding the first filters (resulting in nothing being forwarded until reloaded).
 - Fix Void Overflow Card not sending counter-deltas to the network, causing ghost items (as the network doesn't know the items were voided).
 
+### Changed
+- Add part recipes for Combined and I/O Interfaces, matching the existing full-block recipes.
+
 
 ## [0.6.7-beta2] - 2026-08-11
 ### Added
