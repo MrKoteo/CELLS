@@ -14,6 +14,7 @@ import net.minecraft.item.ItemStack;
 
 import appeng.client.gui.widgets.GuiCustomSlot;
 
+import com.cells.gui.IHoverIngredientSlot;
 import com.cells.gui.ResourceRenderer;
 
 
@@ -35,7 +36,7 @@ import com.cells.gui.ResourceRenderer;
  * @param <R> The resource type (FluidStack, GasStack, etc.)
  * @param <H> The host interface type
  */
-public abstract class AbstractResourceTankSlot<R, H> extends GuiCustomSlot {
+public abstract class AbstractResourceTankSlot<R, H> extends GuiCustomSlot implements IHoverIngredientSlot {
 
     protected final H host;
     protected final int displayTankIndex;
@@ -90,6 +91,14 @@ public abstract class AbstractResourceTankSlot<R, H> extends GuiCustomSlot {
      * Get the localized display name for the resource (for tooltip).
      */
     protected abstract String getResourceDisplayName(R resource);
+
+    /**
+     * Get the raw ingredient JEI and hover-based helpers should see for this slot.
+     */
+    @Nullable
+    protected Object getTooltipIngredient(R resource) {
+        return null;
+    }
 
     /**
      * Get the amount/quantity in the resource stack.
@@ -152,6 +161,19 @@ public abstract class AbstractResourceTankSlot<R, H> extends GuiCustomSlot {
             long capacity = this.maxSlotSizeSupplier.getAsLong();
             ResourceRenderer.renderStackSizeWithCapacity(this.fontRenderer, getResourceAmount(resource), capacity, this.xPos(), this.yPos());
         }
+    }
+
+    @Override
+    @Nullable
+    public Object getIngredient() {
+        R resource = getResource();
+        if (resource == null) return null;
+        if (getResourceAmount(resource) <= 0) return null;
+
+        Object ingredient = getTooltipIngredient(resource);
+        if (ingredient instanceof ItemStack && ((ItemStack) ingredient).isEmpty()) return null;
+
+        return ingredient;
     }
 
     @Override

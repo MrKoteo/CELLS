@@ -25,7 +25,6 @@ import appeng.api.storage.channels.IItemStorageChannel;
 import appeng.api.storage.data.IAEItemStack;
 import appeng.core.localization.GuiText;
 import appeng.container.interfaces.IJEIGhostIngredients;
-import appeng.client.gui.AEBaseGui;
 import appeng.client.gui.widgets.GuiImgButton;
 import appeng.client.gui.widgets.GuiTabButton;
 import appeng.fluids.util.AEFluidStack;
@@ -34,6 +33,7 @@ import mezz.jei.api.gui.IGhostIngredientHandler.Target;
 
 import com.cells.Tags;
 import com.cells.client.KeyBindings;
+import com.cells.gui.AbstractFakeSlotAwareGui;
 import com.cells.gui.GuiPageNavigation;
 import com.cells.gui.QuickAddHelper;
 import com.cells.integration.mekanismenergistics.MekanismEnergisticsIntegration;
@@ -64,7 +64,7 @@ import com.cells.parts.subnetproxy.PartSubnetProxyFront;
  *   <li>Toolbox at y=183 (shifted from standard 161)</li>
  * </ul>
  */
-public class GuiSubnetProxy extends AEBaseGui implements IJEIGhostIngredients {
+public class GuiSubnetProxy extends AbstractFakeSlotAwareGui implements IJEIGhostIngredients {
 
     private static final int TOOLBOX_X = 178;
     private static final int TOOLBOX_Y = 183;
@@ -409,7 +409,7 @@ public class GuiSubnetProxy extends AEBaseGui implements IJEIGhostIngredients {
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         // Handle quick-add keybind
         if (KeyBindings.QUICK_ADD_TO_FILTER.isActiveAndMatches(keyCode)) {
-            Slot hoveredSlot = this.getSlotUnderMouse();
+            Slot hoveredSlot = this.getRealSlotUnderMouse();
             if (handleQuickAdd(hoveredSlot)) return;
         }
 

@@ -110,6 +110,12 @@ public class ItemStorageSlot<H extends ItemStorageSlot.IItemStorageHost> extends
     }
 
     @Override
+    @Nullable
+    protected Object getTooltipIngredient(ItemStack resource) {
+        return resource.isEmpty() ? null : resource.copy();
+    }
+
+    @Override
     protected boolean handlePouring(ItemStack clickStack, int mouseButton) {
         // Export mode is read-only - items come from adjacent inventories
         if (this.isExport) return false;

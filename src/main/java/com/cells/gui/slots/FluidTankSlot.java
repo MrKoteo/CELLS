@@ -127,6 +127,12 @@ public class FluidTankSlot<H extends FluidTankSlot.IFluidTankHost> extends Abstr
     }
 
     @Override
+    @Nullable
+    protected Object getTooltipIngredient(FluidStack resource) {
+        return resource;
+    }
+
+    @Override
     protected boolean handlePouring(ItemStack clickStack, int mouseButton) {
         // Send EMPTY_ITEM action to server via AE2's packet system
         // The container's doAction will handle the actual fluid transfer

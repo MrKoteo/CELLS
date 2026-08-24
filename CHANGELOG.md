@@ -26,6 +26,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Fix the Clear Filters button not applying in I/O and Universal Interfaces.
 - Fix Subnet Proxy not properly initializing when adding the first filters (resulting in nothing being forwarded until reloaded).
 - Fix Void Overflow Card not sending counter-deltas to the network, causing ghost items (as the network doesn't know the items were voided).
+- Fix GUIs not exposing the fake slots for JEI interactions (i.e., bookmarking).
 
 ### Changed
 - Add part recipes for Combined and I/O Interfaces, matching the existing full-block recipes.

@@ -21,7 +21,6 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraftforge.fml.common.Optional;
 import net.minecraftforge.items.IItemHandler;
 
-import appeng.client.gui.AEBaseGui;
 import appeng.client.gui.widgets.GuiCustomSlot;
 import appeng.container.AEBaseContainer;
 import appeng.container.interfaces.IJEIGhostIngredients;
@@ -35,6 +34,7 @@ import com.cells.blocks.iointerface.ContainerIOInterface;
 import com.cells.blocks.iointerface.IIOInterfaceHost;
 import com.cells.client.KeyBindings;
 import com.cells.config.CellsConfig;
+import com.cells.gui.AbstractFakeSlotAwareGui;
 import com.cells.gui.DynamicTooltipTabButton;
 import com.cells.gui.GuiClearFiltersButton;
 import com.cells.gui.GuiControlsHelpToggleButton;
@@ -86,7 +86,7 @@ import com.cells.util.PollingRateUtils;
  */
 @Optional.Interface(iface = "appeng.container.interfaces.IJEIGhostIngredients", modid = "jei")
 public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C extends AEBaseContainer>
-        extends AEBaseGui implements IJEIGhostIngredients {
+        extends AbstractFakeSlotAwareGui implements IJEIGhostIngredients {
 
     private static final ResourceLocation BACKGROUND_TEXTURE =
         new ResourceLocation(Tags.MODID, "textures/guis/import_interface.png");
@@ -692,7 +692,7 @@ public abstract class AbstractResourceInterfaceGui<H extends IInterfaceHost, C e
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         // Handle quick-add keybind
         if (KeyBindings.QUICK_ADD_TO_FILTER.isActiveAndMatches(keyCode)) {
-            Slot hoveredSlot = this.getSlotUnderMouse();
+            Slot hoveredSlot = this.getRealSlotUnderMouse();
             if (handleQuickAdd(hoveredSlot)) return;
         }
 

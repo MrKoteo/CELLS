@@ -46,7 +46,7 @@ public class Cells {
 
     @SidedProxy(
         clientSide = "com.cells.proxy.ClientProxy",
-        serverSide = "com.cells.proxy.ServerProxy"
+        serverSide = "com.cells.proxy.CommonProxy"
     )
     public static CommonProxy proxy;
 

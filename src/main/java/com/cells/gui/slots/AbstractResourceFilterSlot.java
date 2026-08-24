@@ -23,6 +23,8 @@ import appeng.container.slot.IJEITargetSlot;
 
 import mezz.jei.api.gui.IGhostIngredientHandler.Target;
 
+import com.cells.gui.IHoverIngredientSlot;
+
 
 /**
  * Unified abstract base for all resource filter slots.
@@ -58,7 +60,7 @@ import mezz.jei.api.gui.IGhostIngredientHandler.Target;
  *
  * @param <R> The resource type (FluidStack, GasStack, EssentiaStack, etc.)
  */
-public abstract class AbstractResourceFilterSlot<R> extends GuiCustomSlot implements IJEITargetSlot {
+public abstract class AbstractResourceFilterSlot<R> extends GuiCustomSlot implements IJEITargetSlot, IHoverIngredientSlot {
 
     protected final int slot;
 
@@ -143,6 +145,18 @@ public abstract class AbstractResourceFilterSlot<R> extends GuiCustomSlot implem
         if (resource == null) return;
 
         drawResourceContent(mc, mouseX, mouseY, partialTicks, resource);
+    }
+
+    @Override
+    @Nullable
+    public Object getIngredient() {
+        R resource = getResource();
+        if (resource == null) return null;
+
+        Object ingredient = getTooltipIngredient(resource);
+        if (ingredient instanceof ItemStack && ((ItemStack) ingredient).isEmpty()) return null;
+
+        return ingredient;
     }
 
     @Override

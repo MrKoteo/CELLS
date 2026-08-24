@@ -17,7 +17,6 @@ import net.minecraft.util.ResourceLocation;
 
 import net.minecraftforge.fml.common.Optional;
 
-import appeng.client.gui.AEBaseGui;
 import appeng.client.gui.widgets.GuiCustomSlot;
 import appeng.container.interfaces.IJEIGhostIngredients;
 
@@ -26,6 +25,7 @@ import mezz.jei.api.gui.IGhostIngredientHandler.Target;
 import com.cells.Tags;
 import com.cells.client.KeyBindings;
 import com.cells.config.CellsConfig;
+import com.cells.gui.AbstractFakeSlotAwareGui;
 import com.cells.gui.GuiClearFiltersButton;
 import com.cells.gui.GuiRecipeTransferDirectionButton;
 import com.cells.gui.slots.AbstractResourceFilterSlot;
@@ -47,7 +47,7 @@ import com.cells.gui.slots.AbstractResourceFilterSlot;
  */
 @Optional.Interface(iface = "appeng.container.interfaces.IJEIGhostIngredients", modid = "jei")
 public abstract class AbstractCreativeCellGui<C extends AbstractCreativeCellSyncContainer<?, ?>>
-        extends AEBaseGui implements IJEIGhostIngredients {
+        extends AbstractFakeSlotAwareGui implements IJEIGhostIngredients {
 
     protected static final ResourceLocation TEXTURE = new ResourceLocation(Tags.MODID, "textures/guis/creative_cell.png");
 
@@ -187,7 +187,7 @@ public abstract class AbstractCreativeCellGui<C extends AbstractCreativeCellSync
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         // Handle quick-add keybind
         if (KeyBindings.QUICK_ADD_TO_FILTER.isActiveAndMatches(keyCode)) {
-            Slot hoveredSlot = this.getSlotUnderMouse();
+            Slot hoveredSlot = this.getRealSlotUnderMouse();
             if (handleQuickAdd(hoveredSlot)) return;
         }
 

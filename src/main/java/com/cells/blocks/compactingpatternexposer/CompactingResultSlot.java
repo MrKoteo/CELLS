@@ -16,13 +16,14 @@ import net.minecraft.item.ItemStack;
 import appeng.client.gui.widgets.GuiCustomSlot;
 import appeng.util.ReadableNumberConverter;
 
+import com.cells.gui.IHoverIngredientSlot;
 import com.cells.gui.ResourceRenderer;
 
 
 /**
  * Read-only ghost slot that previews the compacting result for a filter slot.
  */
-public class CompactingResultSlot extends GuiCustomSlot {
+public class CompactingResultSlot extends GuiCustomSlot implements IHoverIngredientSlot {
 
     @FunctionalInterface
     public interface PreviewProvider {
@@ -75,6 +76,16 @@ public class CompactingResultSlot extends GuiCustomSlot {
         ));
 
         return String.join("\n", lines);
+    }
+
+    @Override
+    @Nullable
+    public Object getIngredient() {
+        TileCompactingPatternExposer.PatternPreview preview = this.provider.getPreview(this.id);
+        if (preview == null) return null;
+
+        ItemStack output = preview.getOutput();
+        return output.isEmpty() ? null : output.copy();
     }
 
     // Use the normal vanilla item tooltip path so mod-added tooltip lines match the interface slots.

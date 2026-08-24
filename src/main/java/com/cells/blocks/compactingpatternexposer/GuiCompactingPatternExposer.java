@@ -22,7 +22,6 @@ import net.minecraft.util.ResourceLocation;
 
 import net.minecraftforge.fml.common.Optional;
 
-import appeng.client.gui.AEBaseGui;
 import appeng.client.gui.widgets.GuiNumberBox;
 import appeng.client.gui.widgets.GuiCustomSlot;
 import appeng.container.interfaces.IJEIGhostIngredients;
@@ -33,6 +32,7 @@ import mezz.jei.api.gui.IGhostIngredientHandler.Target;
 
 import com.cells.Tags;
 import com.cells.client.KeyBindings;
+import com.cells.gui.AbstractFakeSlotAwareGui;
 import com.cells.gui.QuickAddHelper;
 import com.cells.gui.slots.AbstractResourceFilterSlot;
 import com.cells.network.CellsNetworkHandler;
@@ -45,7 +45,7 @@ import com.cells.network.sync.ResourceType;
  * GUI for the Compacting Pattern Exposer.
  */
 @Optional.Interface(iface = "appeng.container.interfaces.IJEIGhostIngredients", modid = "jei")
-public class GuiCompactingPatternExposer extends AEBaseGui implements IJEIGhostIngredients {
+public class GuiCompactingPatternExposer extends AbstractFakeSlotAwareGui implements IJEIGhostIngredients {
 
     private static final ResourceLocation TEXTURE =
         new ResourceLocation(Tags.MODID, "textures/guis/compacting_pattern_exposer.png");
@@ -127,6 +127,11 @@ public class GuiCompactingPatternExposer extends AEBaseGui implements IJEIGhostI
     }
 
     @Override
+    protected boolean shouldExposeFakeSlotUnderMouse() {
+        return !this.multiplierModalOpen;
+    }
+
+    @Override
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
         if (this.multiplierModalOpen) {
             this.handleMultiplierModalKeyTyped(typedChar, keyCode);
@@ -134,7 +139,7 @@ public class GuiCompactingPatternExposer extends AEBaseGui implements IJEIGhostI
         }
 
         if (KeyBindings.QUICK_ADD_TO_FILTER.isActiveAndMatches(keyCode)) {
-            Slot hoveredSlot = this.getSlotUnderMouse();
+            Slot hoveredSlot = this.getRealSlotUnderMouse();
             ItemStack stack = QuickAddHelper.getItemUnderCursor(hoveredSlot);
             if (!stack.isEmpty()) {
                 CellsNetworkHandler.INSTANCE.sendToServer(new PacketQuickAddFilter(
