@@ -383,6 +383,12 @@ public class FluidHyperDensityCellInventory implements ICellInventory<IAEFluidSt
         return cachedHasOverflowCard;
     }
 
+    private void queueOverflowVoidCounterDelta(IAEFluidStack input, long voidedAmount, IActionSource src) {
+        if (voidedAmount <= 0) return;
+
+        DeferredCellOperations.queueCounterDelta(this, container, channel, input, -voidedAmount, src);
+    }
+
     // =====================
     // ICellInventory implementation
     // =====================
@@ -412,7 +418,10 @@ public class FluidHyperDensityCellInventory implements ICellInventory<IAEFluidSt
         long available = capacity - storedFluidCount;
 
         if (available <= 0) {
-            if (canVoidOverflow) return null;
+            if (canVoidOverflow) {
+                if (mode == Actionable.MODULATE) queueOverflowVoidCounterDelta(input, input.getStackSize(), src);
+                return null;
+            }
 
             return input;
         }
@@ -424,7 +433,10 @@ public class FluidHyperDensityCellInventory implements ICellInventory<IAEFluidSt
             long typeAvailable = perTypeLimit - existingCount;
 
             if (typeAvailable <= 0) {
-                if (canVoidOverflow) return null;
+                if (canVoidOverflow) {
+                    if (mode == Actionable.MODULATE) queueOverflowVoidCounterDelta(input, input.getStackSize(), src);
+                    return null;
+                }
 
                 return input;
             }
@@ -443,7 +455,10 @@ public class FluidHyperDensityCellInventory implements ICellInventory<IAEFluidSt
         if (toInsert >= input.getStackSize()) return null;
 
         // Void remainder if it's an existing type
-        if (canVoidOverflow) return null;
+        if (canVoidOverflow) {
+            if (mode == Actionable.MODULATE) queueOverflowVoidCounterDelta(input, input.getStackSize() - toInsert, src);
+            return null;
+        }
 
         IAEFluidStack remainder = input.copy();
         remainder.setStackSize(CellMathHelper.subtractWithUnderflowProtection(input.getStackSize(), toInsert));

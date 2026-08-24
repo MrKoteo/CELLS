@@ -25,6 +25,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 ### Fixed
 - Fix the Clear Filters button not applying in I/O and Universal Interfaces.
 - Fix Subnet Proxy not properly initializing when adding the first filters (resulting in nothing being forwarded until reloaded).
+- Fix Void Overflow Card not sending counter-deltas to the network, causing ghost items (as the network doesn't know the items were voided).
 
 
 ## [0.6.7-beta2] - 2026-08-11

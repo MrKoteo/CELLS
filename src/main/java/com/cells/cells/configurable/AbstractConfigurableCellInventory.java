@@ -7,6 +7,7 @@ import net.minecraft.nbt.NBTTagCompound;
 import net.minecraftforge.items.IItemHandler;
 
 import appeng.api.config.FuzzyMode;
+import appeng.api.networking.security.IActionSource;
 import appeng.api.storage.ICellInventory;
 import appeng.api.storage.ISaveProvider;
 import appeng.api.storage.IStorageChannel;
@@ -82,6 +83,19 @@ public abstract class AbstractConfigurableCellInventory<T extends IAEStack<T>> i
      */
     protected void saveChangesDeferred() {
         DeferredCellOperations.markDirty(this, container);
+    }
+
+    /**
+     * Cancel the portion of an accepted insert that was intentionally voided.
+     * <p>
+     * The network only sees the returned remainder, so returning {@code null} for an
+     * overflow-card insert makes AE2 think the full input was stored. We emit a negative
+     * delta for the voided count so the grid cache tracks only what was actually stored.
+     */
+    protected void queueOverflowVoidCounterDelta(T input, long voidedAmount, IActionSource src) {
+        if (voidedAmount <= 0) return;
+
+        DeferredCellOperations.queueCounterDelta(this, container, getChannel(), input, -voidedAmount, src);
     }
 
     // =====================

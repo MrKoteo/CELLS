@@ -179,7 +179,11 @@ public class ConfigurableCellGasInventory extends AbstractConfigurableCellInvent
         // Overflow card voids excess of already-stored types
         boolean canVoidOverflow = hasOverflowCard && !isNewType;
         if (typeAvailable <= 0) {
-            if (canVoidOverflow) return null;
+            if (canVoidOverflow) {
+                if (mode == Actionable.MODULATE) queueOverflowVoidCounterDelta(input, input.getStackSize(), src);
+                return null;
+            }
+
             return input;
         }
 
@@ -194,7 +198,10 @@ public class ConfigurableCellGasInventory extends AbstractConfigurableCellInvent
         }
 
         if (toInsert >= input.getStackSize()) return null;
-        if (canVoidOverflow) return null;
+        if (canVoidOverflow) {
+            if (mode == Actionable.MODULATE) queueOverflowVoidCounterDelta(input, input.getStackSize() - toInsert, src);
+            return null;
+        }
 
         IAEGasStack remainder = input.copy();
         remainder.setStackSize(input.getStackSize() - toInsert);

@@ -342,6 +342,12 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
         DeferredCellOperations.queueCrossTierNotification(this, container, channel, changes, src);
     }
 
+    private void queueOverflowVoidCounterDelta(@Nullable IActionSource src, IAEItemStack input, long voidedAmount) {
+        if (voidedAmount <= 0) return;
+
+        DeferredCellOperations.queueCounterDelta(this, container, channel, input, -voidedAmount, src);
+    }
+
     private void loadFromNBT() {
         // Load stored base units
         storedBaseUnits = CellMathHelper.loadLong(tagCompound, NBT_STORED_BASE_UNITS);
@@ -1435,7 +1441,10 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
 
         if (canInsert <= 0) {
             // Cell is full - check overflow card
-            if (cachedHasOverflowCard) return null;
+            if (cachedHasOverflowCard) {
+                if (mode == Actionable.MODULATE) queueOverflowVoidCounterDelta(src, input, inputCount);
+                return null;
+            }
 
             return input;
         }
@@ -1451,7 +1460,10 @@ public class CompactingCellInventory implements ICellInventory<IAEItemStack> {
         }
 
         // Overflow card voids the remainder
-        if (cachedHasOverflowCard) return null;
+        if (cachedHasOverflowCard) {
+            if (mode == Actionable.MODULATE) queueOverflowVoidCounterDelta(src, input, inputCount - canInsert);
+            return null;
+        }
 
         IAEItemStack remainder = input.copy();
         remainder.setStackSize(inputCount - canInsert);

@@ -1,6 +1,7 @@
 package com.cells.util;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -106,6 +107,33 @@ public final class DeferredCellOperations {
         // Merge changes into pending notification
         pending.addChanges(changes);
         ensureCallbackRegistered();
+    }
+
+    /**
+     * Queue a single-stack counter delta.
+     * For queuing multiple changes, use {@link #queueCrossTierNotification}.
+     *
+     * @param cell      The cell inventory
+     * @param container The save provider
+     * @param channel   The storage channel
+     * @param template  Stack prototype for the delta
+     * @param delta     Signed stack delta to post
+     * @param src       The action source
+     * @param <T>       The stack type
+     */
+    public static <T extends IAEStack<T>> void queueCounterDelta(
+            ICellInventory<T> cell,
+            @Nullable ISaveProvider container,
+            IStorageChannel<T> channel,
+            T template,
+            long delta,
+            @Nullable IActionSource src) {
+
+        if (template == null || delta == 0) return;
+
+        T change = template.copy();
+        change.setStackSize(delta);
+        queueCrossTierNotification(cell, container, channel, Collections.singletonList(change), src);
     }
 
     /**

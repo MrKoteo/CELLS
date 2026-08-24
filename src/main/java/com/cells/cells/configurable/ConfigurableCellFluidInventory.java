@@ -179,7 +179,11 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
         boolean canVoidOverflow = hasOverflowCard && !isNewType;
 
         if (typeAvailable <= 0) {
-            if (canVoidOverflow) return null;
+            if (canVoidOverflow) {
+                if (mode == Actionable.MODULATE) queueOverflowVoidCounterDelta(input, input.getStackSize(), src);
+                return null;
+            }
+
             return input;
         }
 
@@ -194,7 +198,10 @@ public class ConfigurableCellFluidInventory extends AbstractConfigurableCellInve
         }
 
         if (toInsert >= input.getStackSize()) return null;
-        if (canVoidOverflow) return null;
+        if (canVoidOverflow) {
+            if (mode == Actionable.MODULATE) queueOverflowVoidCounterDelta(input, input.getStackSize() - toInsert, src);
+            return null;
+        }
 
         IAEFluidStack remainder = input.copy();
         remainder.setStackSize(input.getStackSize() - toInsert);

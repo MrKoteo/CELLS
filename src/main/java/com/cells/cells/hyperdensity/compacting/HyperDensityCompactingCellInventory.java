@@ -530,6 +530,12 @@ public class HyperDensityCompactingCellInventory implements ICellInventory<IAEIt
         DeferredCellOperations.queueCrossTierNotification(this, container, channel, changes, src);
     }
 
+    private void queueOverflowVoidCounterDelta(@Nullable IActionSource src, IAEItemStack input, long voidedAmount) {
+        if (voidedAmount <= 0) return;
+
+        DeferredCellOperations.queueCounterDelta(this, container, channel, input, -voidedAmount, src);
+    }
+
     /**
      * Loads all cell state from NBT data.
      * <p>
@@ -1724,7 +1730,10 @@ public class HyperDensityCompactingCellInventory implements ICellInventory<IAEIt
 
         if (canInsert <= 0) {
             // Cell is full - check overflow card
-            if (cachedHasOverflowCard) return null;
+            if (cachedHasOverflowCard) {
+                if (mode == Actionable.MODULATE) queueOverflowVoidCounterDelta(src, input, inputCount);
+                return null;
+            }
 
             return input;
         }
@@ -1740,7 +1749,10 @@ public class HyperDensityCompactingCellInventory implements ICellInventory<IAEIt
         }
 
         // Overflow card voids the remainder
-        if (cachedHasOverflowCard) return null;
+        if (cachedHasOverflowCard) {
+            if (mode == Actionable.MODULATE) queueOverflowVoidCounterDelta(src, input, inputCount - canInsert);
+            return null;
+        }
 
         IAEItemStack remainder = input.copy();
         remainder.setStackSize(inputCount - canInsert);
