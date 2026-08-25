@@ -84,7 +84,7 @@ public final class CellsConfig {
     // Forge 1.12 does not support long-backed @Config fields, so these two values
     // are normalized once during sync and then served from cached parsed values.
     private static long emcCellReportedAmountValue = DEFAULT_EMC_CELL_REPORTED_AMOUNT;
-    private static long interfaceMaxSlotSizeLimitValue = Long.MAX_VALUE;
+    private static long interfaceMaxSlotSizeLimitValue = Integer.MAX_VALUE;
     private static long[] interfaceMaxSlotSizeOffsetsValue = parsePositiveLongArray(DEFAULT_INTERFACE_MAX_SLOT_SIZE_OFFSETS);
     private static long[] interfaceMaxSlotSizeFixedValuesValue = parsePositiveLongArray(DEFAULT_INTERFACE_MAX_SLOT_SIZE_FIXED_VALUES);
 
@@ -541,7 +541,7 @@ public final class CellsConfig {
         // and is normalized during config sync before being cached as a parsed long.
         @Config.LangKey(Tags.MODID + ".config.interfaceMaxSlotSizeLimit")
         @Config.Comment("Maximum slot size limit for interfaces. Caps the user-configurable max slot size per slot. Use -1 for unlimited (Long.MAX_VALUE).")
-        public String interfaceMaxSlotSizeLimit = String.valueOf(Long.MAX_VALUE);
+        public String interfaceMaxSlotSizeLimit = String.valueOf(Integer.MAX_VALUE);
 
         @Config.LangKey(Tags.MODID + ".config.interfaceMaxSlotSizeUseFixedValues")
         @Config.Comment("Use the fixed max-slot-size button values instead of positive/negative offsets. Defaults to false (offsets).")

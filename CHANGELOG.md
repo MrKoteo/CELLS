@@ -30,6 +30,7 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ### Changed
 - Add part recipes for Combined and I/O Interfaces, matching the existing full-block recipes.
+- Change default max slot size from Max Long to Max Int, because *some* pack devs cannot be assed to change THIS ONE config value and then I get harassed by assholes for "balance" reasons. Be happy I didn't hard-cap it to Max Int altogether!
 
 
 ## [0.6.7-beta2] - 2026-08-11

@@ -220,7 +220,7 @@ cells.config.enableConfigurableCells.tooltip=Enable Configurable storage cells
 
 ## Config: Interfaces
 cells.config.interfaceMaxSlotSizeLimit=Interface Max Slot Size Limit
-cells.config.interfaceMaxSlotSizeLimit.tooltip=Maximum slot size limit for interfaces. Caps the user-configurable max slot size per slot. Min: 1, Max: 9.2 quintillion (Long.MAX_VALUE), Default: 9.2 quintillion (Long.MAX_VALUE).
+cells.config.interfaceMaxSlotSizeLimit.tooltip=Maximum slot size limit for interfaces. Caps the user-configurable max slot size per slot. Min: 1, Max: 9.2 quintillion (Long.MAX_VALUE), Default: 2.1 billion (Integer.MAX_VALUE).
 cells.config.interfaceMaxSlotSizeUseFixedValues=Use Fixed Max Slot Size Values
 cells.config.interfaceMaxSlotSizeUseFixedValues.tooltip=Use the fixed max slot size button values instead of positive/negative offsets. Default: false (offsets).
 cells.config.interfaceMaxSlotSizeOffsets=Max Slot Size Offsets
